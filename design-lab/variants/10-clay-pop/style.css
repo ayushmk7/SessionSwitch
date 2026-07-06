@@ -1,0 +1,664 @@
+/* Clay Pop — the toy box. Every panel is a soft rubbery bead of candy
+   clay: chunky 20px+ radii, a double shadow (soft outer drop + an inset
+   top-light rim + inset bottom-dark rim) that reads as squishy 3D relief
+   rather than flat color. Every interactive thing squishes on :active
+   (scale .94, flipping the shadow inward so it looks pressed INTO the
+   surface). Effort is four stacked clay jellybeans that plump up
+   (widen + gain a glossy highlight) as they light. Session state is a
+   googly eye — a white circle with a dark pupil that sits, darts, blinks
+   or naps depending on state, never a plain colored dot. The floating
+   badge is a jelly button that idle-wobbles on its own. A verified apply
+   pops four pastel confetti squares out of the toast; a rejected apply
+   gets a gentle 3-keyframe head-shake; a clamped apply gets a one-shot
+   squash-bounce landing. Nothing here is trying to be serious.
+
+   Hazard notes honored:
+   - No clip-path/overflow:hidden on .ss-row, .ss-dropdown, .ss-window,
+     .ss-chip-model, .ss-chip-effort, .ss-row-preset — every submenu is a
+     real child appended into its anchor chip/row and positioned by
+     structure.css; clipping any ancestor would hide the popped menu.
+     overflow:hidden is used ONLY on the tiny .ss-effort-bars leaf spans
+     (no submenu descendant, so it only crops the bar's own glyph).
+   - No `position` redeclared on .ss-dropdown/.ss-window — structure.css
+     already makes both positioned; clay shadows/radii just skin them.
+   - Read-only rows are dimmed by color only, never opacity. The closed
+     "sleepy eye" is a shape change (scaleY), not a fade.
+   - .ss-row keeps the established two-line grid reflow (precedent:
+     variants 05-09) — headline (eye + project) then a control strip
+     (terminal + model + effort + preset) — 340px is too tight for one
+     line of chunky clay chips otherwise.
+   - .ss-row-preset sits at the row's right edge, so its submenu is
+     right-anchored (offset only, position stays owned by structure.css).
+   - All `content:` strings below use literal characters, never hex
+     escapes, so nothing is at risk of the "escape swallows one space"
+     CSS parsing pitfall — gaps use plain doubled spaces instead.
+   - Confetti is pure CSS: the verified toast's ::before/::after each
+     render 2 pastel squares (one is the pseudo's own background, one is
+     a box-shadow copy — "box-shadow multiplication") and fly outward +
+     rotate for 600ms as the toast mounts. No JS, no images. */
+
+body.ss.v-clay-pop {
+  --bg: #fdf1f5;
+  --panel: #ffffff;
+  --lilac: #c9b6ff;
+  --mint: #a8e6c9;
+  --butter: #ffe29a;
+  --bubblegum: #ff9ec6;
+  --ink: #4a3f5c;
+  --ink-soft: rgba(74, 63, 92, .62);
+  --ink-faint: rgba(74, 63, 92, .32);
+  --line-faint: rgba(74, 63, 92, .12);
+
+  --clay-shadow: 0 14px 26px rgba(74, 63, 92, .22), inset 0 4px 8px rgba(255, 255, 255, .8), inset 0 -6px 10px rgba(0, 0, 0, .06);
+  --clay-shadow-sm: 0 6px 14px rgba(74, 63, 92, .18), inset 0 2px 4px rgba(255, 255, 255, .8), inset 0 -3px 5px rgba(0, 0, 0, .06);
+  --clay-shadow-pressed: inset 0 3px 6px rgba(74, 63, 92, .25), inset 0 -2px 3px rgba(255, 255, 255, .5);
+
+  background:
+    radial-gradient(circle at 14% 22%, rgba(201, 182, 255, .55), transparent 40%),
+    radial-gradient(circle at 86% 14%, rgba(255, 158, 198, .5), transparent 38%),
+    radial-gradient(circle at 78% 82%, rgba(168, 230, 201, .5), transparent 42%),
+    radial-gradient(circle at 18% 86%, rgba(255, 226, 154, .5), transparent 38%),
+    var(--bg);
+  color: var(--ink);
+  font-family: 'SF Pro Rounded', 'Arial Rounded MT Bold', 'Comic Sans MS', sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.v-clay-pop button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.v-clay-pop a { text-decoration: none; color: inherit; }
+
+.v-clay-pop button,
+.v-clay-pop .ss-chip-model,
+.v-clay-pop .ss-chip-effort,
+.v-clay-pop .ss-row-preset,
+.v-clay-pop .ss-menu-item,
+.v-clay-pop .ss-picker-mode,
+.v-clay-pop .ss-picker-option,
+.v-clay-pop .ss-badge-summary,
+.v-clay-pop .ss-lab-link,
+.v-clay-pop .ss-row {
+  transition: transform .12s ease-out, background .15s ease, box-shadow .15s ease, color .15s ease;
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-clay-pop .ss-menubar {
+  background: var(--panel);
+  box-shadow: 0 2px 10px rgba(74, 63, 92, .12);
+}
+
+.v-clay-pop .ss-menubar-app {
+  background: linear-gradient(180deg, #fff, #fbeef5);
+  color: var(--ink);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 5px 14px;
+  box-shadow: var(--clay-shadow-sm);
+  cursor: pointer;
+}
+.v-clay-pop .ss-menubar-app:hover { color: #7a4fae; }
+.v-clay-pop .ss-menubar-app:active {
+  animation: none;
+  transform: scale(.94);
+  box-shadow: var(--clay-shadow-pressed);
+}
+.v-clay-pop .ss-menubar-app.ss-attention {
+  background: linear-gradient(180deg, var(--bubblegum), #ff7fb3);
+  color: #fff;
+  animation: clay-attention 1s ease-in-out infinite;
+}
+.v-clay-pop .ss-menubar-app.ss-attention::after {
+  content: '!';
+  display: inline-block;
+  margin-left: 6px;
+  font-weight: 900;
+}
+
+.v-clay-pop .ss-menubar-clock {
+  color: var(--ink-soft);
+  font-weight: 600;
+  background: rgba(255, 255, 255, .6);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+/* ---------- Dropdown: the candy jar ---------- */
+
+.v-clay-pop .ss-dropdown {
+  margin-top: 10px;
+  background: var(--panel);
+  border-radius: 24px;
+  box-shadow: var(--clay-shadow);
+  padding: 12px 12px 10px;
+}
+
+/* Two-line reflow (precedent 05-09): headline = eye + project;
+   control strip = terminal + model + effort + preset. Chunky clay
+   chips need the extra line to fit the 340px dropdown. */
+.v-clay-pop .ss-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto auto;
+  grid-template-areas:
+    "dot  proj  proj  proj   proj"
+    "dot  term  model effort preset";
+  column-gap: 6px;
+  row-gap: 6px;
+  align-items: center;
+  padding: 10px 8px;
+  margin-bottom: 6px;
+  border-radius: 16px;
+  cursor: pointer;
+}
+.v-clay-pop .ss-row:hover { background: rgba(201, 182, 255, .16); }
+.v-clay-pop .ss-row:active { transform: scale(.97); }
+.v-clay-pop .ss-row:last-of-type { margin-bottom: 0; }
+
+/* ---------- State dot: googly eye ---------- */
+
+.v-clay-pop .ss-state-dot {
+  grid-area: dot;
+  align-self: center;
+  position: relative;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(74, 63, 92, .28), inset 0 -2px 3px rgba(0, 0, 0, .08);
+}
+.v-clay-pop .ss-state-dot::before {
+  /* glint highlight, present on every state */
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .95);
+}
+.v-clay-pop .ss-state-dot::after {
+  /* pupil */
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  transition: transform .2s ease, width .2s ease, height .2s ease;
+}
+
+.v-clay-pop .ss-row.is-idle .ss-state-dot::after { transform: translate(-50%, -40%); }
+
+.v-clay-pop .ss-row.is-working .ss-state-dot::after {
+  animation: googly-dart 1.1s ease-in-out infinite;
+}
+
+.v-clay-pop .ss-row.is-awaiting .ss-state-dot {
+  animation: googly-blink 1.6s ease-in-out infinite;
+}
+.v-clay-pop .ss-row.is-awaiting .ss-state-dot::after {
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -68%);
+}
+
+/* Read-only: napping eye — closed to a lid, dimmed by color, never
+   opacity. Declared after idle/working/awaiting so it wins the tie on
+   rows that combine a state class with .is-readonly (e.g. s6). */
+.v-clay-pop .ss-row.is-readonly .ss-state-dot {
+  animation: none;
+  background: var(--ink-faint);
+  box-shadow: none;
+  transform: scaleY(.32);
+}
+.v-clay-pop .ss-row.is-readonly .ss-state-dot::after,
+.v-clay-pop .ss-row.is-readonly .ss-state-dot::before {
+  content: none;
+}
+
+/* ---------- Project / terminal readouts ---------- */
+
+.v-clay-pop .ss-row-project {
+  grid-area: proj;
+  font-weight: 700;
+  color: var(--ink);
+}
+.v-clay-pop .ss-row-terminal {
+  grid-area: term;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.v-clay-pop .ss-row.is-readonly .ss-row-terminal::after {
+  content: '  🔒';
+  /* literal emoji character, no hex escape */
+}
+
+/* ---------- Chips: candy pills ---------- */
+
+.v-clay-pop .ss-chip-model,
+.v-clay-pop .ss-chip-effort,
+.v-clay-pop .ss-row-preset {
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 14px;
+  box-shadow: var(--clay-shadow-sm);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.v-clay-pop .ss-chip-model:hover,
+.v-clay-pop .ss-row-preset:hover { color: #7a4fae; }
+.v-clay-pop .ss-chip-model:active,
+.v-clay-pop .ss-chip-effort:active,
+.v-clay-pop .ss-row-preset:active {
+  transform: scale(.94);
+  box-shadow: var(--clay-shadow-pressed);
+}
+
+.v-clay-pop .ss-chip-model { grid-area: model; }
+.v-clay-pop .ss-chip-effort { grid-area: effort; padding: 5px 6px; }
+.v-clay-pop .ss-row-preset { grid-area: preset; }
+/* Right-anchor: preset sits at the row's right edge, so its default
+   left:0 submenu would run past the dropdown/viewport edge. Offset
+   only — position stays owned by structure.css. */
+.v-clay-pop .ss-row-preset .ss-menu { left: auto; right: 0; }
+
+/* Stacked clay jellybeans — unlit = thin pale pill, lit = plump glossy
+   pill (wider + gradient fill + shine). */
+.v-clay-pop .ss-effort-bars span {
+  display: inline-block;
+  width: 5px;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+  border-radius: 3px;
+  background: rgba(201, 182, 255, .35);
+  transform: scaleX(.7);
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.v-clay-pop .ss-effort-bars span:nth-child(1) { height: 5px; }
+.v-clay-pop .ss-effort-bars span:nth-child(2) { height: 8px; }
+.v-clay-pop .ss-effort-bars span:nth-child(3) { height: 11px; }
+.v-clay-pop .ss-effort-bars span:nth-child(4) { height: 14px; }
+.v-clay-pop .ss-effort-bars span.on {
+  transform: scaleX(1);
+  background: linear-gradient(180deg, var(--bubblegum), var(--lilac));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), 0 1px 2px rgba(74, 63, 92, .3);
+}
+
+/* ---------- Pending: pulsing candy ring ---------- */
+
+.v-clay-pop .ss-chip-model.is-pending,
+.v-clay-pop .ss-chip-effort.is-pending,
+.v-clay-pop .ss-row-preset.is-pending {
+  animation: clay-pulse 1s ease-in-out infinite;
+}
+
+/* ---------- Read-only: dim by color only ---------- */
+
+.v-clay-pop .ss-row.is-readonly { cursor: default; }
+.v-clay-pop .ss-row.is-readonly .ss-row-project,
+.v-clay-pop .ss-row.is-readonly .ss-row-terminal,
+.v-clay-pop .ss-row.is-readonly .ss-chip-model,
+.v-clay-pop .ss-row.is-readonly .ss-row-preset {
+  color: var(--ink-faint);
+}
+.v-clay-pop .ss-row.is-readonly .ss-effort-bars span.on {
+  background: var(--ink-faint);
+  box-shadow: none;
+}
+
+/* ---------- Submenus (model / effort / preset), badge columns ---------- */
+
+.v-clay-pop .ss-menu {
+  background: var(--panel);
+  border-radius: 16px;
+  box-shadow: var(--clay-shadow-sm);
+  padding: 6px;
+  margin-top: 6px;
+}
+.v-clay-pop .ss-menu-item {
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+.v-clay-pop .ss-menu-item:hover { background: rgba(201, 182, 255, .25); }
+.v-clay-pop .ss-menu-item.is-active {
+  background: linear-gradient(180deg, var(--mint), #8fd9b3);
+  color: var(--ink);
+}
+.v-clay-pop .ss-menu-item:active { transform: scale(.95); }
+
+.v-clay-pop .ss-dropdown-footer {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 2px dashed var(--line-faint);
+}
+.v-clay-pop .ss-dropdown-footer button {
+  background: linear-gradient(180deg, var(--lilac), #b39bfa);
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  box-shadow: var(--clay-shadow-sm);
+}
+.v-clay-pop .ss-dropdown-footer button:active {
+  transform: scale(.94);
+  box-shadow: var(--clay-shadow-pressed);
+}
+
+/* ---------- Desktop ---------- */
+
+.v-clay-pop .ss-desktop {
+  background: transparent;
+}
+
+/* ---------- Windows: giant clay cards ---------- */
+
+.v-clay-pop .ss-window {
+  background: var(--panel);
+  border-radius: 26px;
+  box-shadow: var(--clay-shadow);
+  opacity: .72;
+  /* No overflow:hidden here — the badge (and its expanded panel) is a
+     real child of .ss-window, docked top-right and translated up 50%
+     by structure.css, so it pokes above/past the window edge. Clipping
+     the window would clip the badge/panel and break its clicks. The
+     title bar gets its own matching top radius below instead. */
+}
+.v-clay-pop .ss-window.is-front { opacity: 1; }
+
+.v-clay-pop .ss-window-title {
+  padding: 12px 18px;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--lilac), var(--bubblegum));
+  border-radius: 26px 26px 0 0;
+}
+#w2 .ss-window-title { background: linear-gradient(135deg, var(--mint), #74c9e0); }
+
+.v-clay-pop .ss-window-body {
+  padding: 14px 18px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.v-clay-pop .ss-window-body pre { font-family: inherit; }
+
+/* ---------- Badge: jelly pill, idle wobble ---------- */
+
+.v-clay-pop .ss-badge-summary {
+  background: linear-gradient(180deg, #fff, #fdeef6);
+  border-radius: 999px;
+  padding: 6px 12px;
+  box-shadow: var(--clay-shadow-sm);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--ink);
+  animation: jelly-wobble 3.2s ease-in-out infinite;
+  transform-origin: 50% 70%;
+}
+.v-clay-pop .ss-badge.is-open .ss-badge-summary {
+  animation: none;
+  background: linear-gradient(180deg, var(--butter), #ffd469);
+}
+.v-clay-pop .ss-badge-summary:active {
+  animation: none;
+  transform: scale(.94);
+  box-shadow: var(--clay-shadow-pressed);
+}
+.v-clay-pop .ss-badge-summary .ss-effort-bars span:nth-child(1) { height: 4px; }
+.v-clay-pop .ss-badge-summary .ss-effort-bars span:nth-child(2) { height: 6px; }
+.v-clay-pop .ss-badge-summary .ss-effort-bars span:nth-child(3) { height: 8px; }
+.v-clay-pop .ss-badge-summary .ss-effort-bars span:nth-child(4) { height: 10px; }
+
+.v-clay-pop .ss-badge-panel {
+  background: var(--panel);
+  border-radius: 18px;
+  box-shadow: var(--clay-shadow);
+  padding: 8px;
+  margin-top: 8px;
+  gap: 4px;
+}
+.v-clay-pop .ss-badge-col { padding: 0 6px; min-width: 84px; }
+.v-clay-pop .ss-badge-col + .ss-badge-col { border-left: 2px dashed var(--line-faint); }
+.v-clay-pop .ss-badge-col .ss-menu-item { font-size: 10.5px; padding: 5px 6px; }
+
+/* ---------- Quick picker (⌘K): the gumball machine ---------- */
+
+.v-clay-pop .ss-picker {
+  background: var(--panel);
+  border-radius: 30px;
+  box-shadow: var(--clay-shadow);
+  padding: 26px 26px 18px;
+}
+
+.v-clay-pop .ss-picker-input {
+  background: rgba(201, 182, 255, .16);
+  border-radius: 16px;
+  box-shadow: var(--clay-shadow-pressed);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  padding: 12px 16px;
+  outline: none;
+}
+.v-clay-pop .ss-picker-input::placeholder { color: var(--ink-faint); }
+
+.v-clay-pop .ss-picker-session {
+  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.v-clay-pop .ss-picker-modes { margin-top: 14px; gap: 8px; }
+.v-clay-pop .ss-picker-mode {
+  background: rgba(255, 255, 255, .7);
+  box-shadow: var(--clay-shadow-sm);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.v-clay-pop .ss-picker-mode.is-active {
+  background: linear-gradient(180deg, var(--bubblegum), #ff7fb3);
+  color: #fff;
+}
+.v-clay-pop .ss-picker-mode:active { transform: scale(.94); }
+
+.v-clay-pop .ss-picker-list { margin-top: 12px; }
+.v-clay-pop .ss-picker-option {
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.v-clay-pop .ss-picker-option:hover { background: rgba(168, 230, 201, .3); }
+.v-clay-pop .ss-picker-option.is-active {
+  background: linear-gradient(180deg, var(--mint), #8fd9b3);
+  color: var(--ink);
+}
+.v-clay-pop .ss-picker-option:active { transform: scale(.96); }
+
+/* ---------- Toasts ---------- */
+
+.v-clay-pop .ss-toast-wrap { gap: 10px; }
+
+.v-clay-pop .ss-toast {
+  position: relative;
+  padding: 12px 18px;
+  border-radius: 20px;
+  box-shadow: var(--clay-shadow);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  animation: clay-pop-in .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.v-clay-pop .ss-toast.is-verified {
+  background: linear-gradient(160deg, #fff, #eafaf1);
+}
+/* Confetti micro-burst: each pseudo-element shows 2 pastel squares
+   (its own background + a box-shadow copy) and flies outward + rotates
+   for 600ms as the toast mounts. */
+.v-clay-pop .ss-toast.is-verified::before,
+.v-clay-pop .ss-toast.is-verified::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 30%;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.v-clay-pop .ss-toast.is-verified::before {
+  background: var(--mint);
+  box-shadow: 16px 6px 0 0 var(--butter);
+  animation: confetti-burst-a .6s ease-out;
+}
+.v-clay-pop .ss-toast.is-verified::after {
+  background: var(--bubblegum);
+  box-shadow: -14px 8px 0 0 var(--lilac);
+  animation: confetti-burst-b .6s ease-out;
+}
+
+.v-clay-pop .ss-toast.is-clamped {
+  background: linear-gradient(160deg, #fff, #fff6e0);
+  animation: clay-pop-in .3s cubic-bezier(.34, 1.56, .64, 1), clay-clamp-bounce .45s ease-out .3s;
+}
+
+.v-clay-pop .ss-toast.is-rejected {
+  background: linear-gradient(160deg, #fff, #f2edfc);
+  color: var(--ink-soft);
+  animation: clay-pop-in .3s cubic-bezier(.34, 1.56, .64, 1), clay-shake .5s ease-in-out .3s;
+}
+
+/* ---------- Lab link ---------- */
+
+.v-clay-pop .ss-lab-link {
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 700;
+  font-size: 11.5px;
+  color: var(--ink);
+  box-shadow: var(--clay-shadow-sm);
+}
+.v-clay-pop .ss-lab-link:hover { color: #7a4fae; }
+.v-clay-pop .ss-lab-link:active {
+  transform: scale(.94);
+  box-shadow: var(--clay-shadow-pressed);
+}
+
+/* ---------- Keyframes ---------- */
+
+@keyframes jelly-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-5deg); }
+  40% { transform: rotate(4deg); }
+  60% { transform: rotate(-2deg); }
+  80% { transform: rotate(1deg); }
+}
+
+@keyframes googly-dart {
+  0%, 100% { transform: translate(-70%, -50%); }
+  50% { transform: translate(-30%, -50%); }
+}
+
+@keyframes googly-blink {
+  0%, 88%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(.15); }
+}
+
+@keyframes clay-attention {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.07) rotate(-2deg); }
+}
+
+@keyframes clay-pulse {
+  0%, 100% { box-shadow: var(--clay-shadow-sm), 0 0 0 0 rgba(255, 158, 198, .55); }
+  50% { box-shadow: var(--clay-shadow-sm), 0 0 0 5px rgba(255, 158, 198, 0); }
+}
+
+@keyframes clay-pop-in {
+  0% { transform: scale(.7); opacity: 0; }
+  70% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes clay-clamp-bounce {
+  0% { transform: scaleY(1); }
+  35% { transform: scaleY(.82); }
+  65% { transform: scaleY(1.08); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes clay-shake {
+  0%, 100% { transform: translateX(0); }
+  25%, 75% { transform: translateX(-6px); }
+  50% { transform: translateX(6px); }
+}
+
+@keyframes confetti-burst-a {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-22px, -26px) rotate(200deg); opacity: 0; }
+}
+
+@keyframes confetti-burst-b {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(20px, -24px) rotate(-190deg); opacity: 0; }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-clay-pop,
+  .v-clay-pop * {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
+  .v-clay-pop .ss-badge-summary,
+  .v-clay-pop .ss-row.is-working .ss-state-dot::after,
+  .v-clay-pop .ss-row.is-awaiting .ss-state-dot,
+  .v-clay-pop .ss-menubar-app.ss-attention,
+  .v-clay-pop .is-pending,
+  .v-clay-pop .ss-chip-model.is-pending,
+  .v-clay-pop .ss-chip-effort.is-pending,
+  .v-clay-pop .ss-row-preset.is-pending,
+  .v-clay-pop .ss-toast.is-rejected,
+  .v-clay-pop .ss-toast.is-clamped {
+    animation: none !important;
+  }
+  .v-clay-pop .ss-toast.is-verified::before,
+  .v-clay-pop .ss-toast.is-verified::after {
+    content: none !important;
+    display: none !important;
+  }
+}
