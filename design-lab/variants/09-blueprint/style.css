@@ -1,0 +1,652 @@
+/* Blueprint — a drafting table, not a screen. Technical drawing on
+   blueprint-blue vellum: everything is pure line work (1px white rules,
+   NO solid fills on any panel), dimension lines with arrowhead glyphs
+   annotate the dropdown, every window/badge carries a section marker
+   (A-A' / B-B'), a title block sits in the bottom-right corner of the
+   desktop, effort bars render as cross-hatched section fills instead of
+   flat color, and a pending apply reads as marching dashes around the
+   chip being edited — the classic CAD "selection" ants. Toasts are
+   stamped like a drawing's revision table (REV A — APPROVED /
+   HOLD — POLICY / REV — REJECTED).
+
+   Deliberately a 3-token palette (blueprint blue / line white / cyan
+   accent) — no red/amber/green instrument colors — so state is told
+   apart by SHAPE and PATTERN (hollow outline / cross-hatch / solid +
+   marching dashes), never by introducing a new hue. That is what keeps
+   this unmistakably distinct from 08's brushed-metal instrument colors.
+
+   Hazard notes honored:
+   - No clip-path/overflow:hidden on .ss-row, .ss-dropdown, .ss-window,
+     .ss-chip-model, .ss-chip-effort, .ss-row-preset — each hosts its
+     submenu as a real appended child positioned absolute (structure.css
+     owns that positioning); clipping any of them would hide the popped
+     menu. overflow:hidden IS used on the tiny .ss-effort-bars spans —
+     those are leaf nodes with no submenu descendant, so it only hides
+     each span's own literal glyph character, never a popped menu.
+   - No `position` redeclared on .ss-dropdown/.ss-window — structure.css
+     already makes both absolutely positioned; their ::before/::after
+     dimension line, corner ticks and title block just inherit that
+     containing block.
+   - Read-only rows are dimmed by color only (never opacity/filter).
+   - .ss-row keeps the two-line grid reflow precedent (05/06/07/08): a
+     headline (dot + project) then a control strip (terminal + model +
+     effort + preset) — 340px is too tight for one line of dimensioned
+     controls otherwise.
+   - Preset sits at the row's right edge, so its submenu is right-
+     anchored (offset only, position untouched).
+   - Marching dashes = animated `background-position` on a layered
+     repeating-linear-gradient "border" (the classic pure-CSS marching-
+     ants trick), used for .is-pending, the awaiting state dot and the
+     menubar attention flag — never animated box-shadow spread. */
+
+body.ss.v-blueprint {
+  --blue: #123a75;
+  --blue-deep: #0a2452;
+  --line: #dce9ff;
+  --line-dim: rgba(220, 233, 255, .46);
+  --line-faint: rgba(220, 233, 255, .22);
+  --cyan: #7ed0ff;
+  --grid-fine: rgba(220, 233, 255, .09);
+  --grid-heavy: rgba(220, 233, 255, .26);
+
+  --font-label: 'Futura', 'Century Gothic', 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Courier New', monospace;
+
+  background-color: var(--blue);
+  background-image:
+    repeating-linear-gradient(90deg, var(--grid-heavy) 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(0deg, var(--grid-heavy) 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(90deg, var(--grid-fine) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(0deg, var(--grid-fine) 0 1px, transparent 1px 24px);
+  color: var(--line);
+  font-family: var(--font-label);
+  font-size: 12.5px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.v-blueprint button { font-family: inherit; }
+.v-blueprint a { text-decoration: none; }
+
+/* ---------- Menu bar ---------- */
+
+.v-blueprint .ss-menubar {
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.v-blueprint .ss-menubar-app {
+  position: relative;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--line);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+}
+.v-blueprint .ss-menubar-app:hover { color: var(--cyan); border-color: var(--cyan); }
+.v-blueprint .ss-menubar-app.ss-attention {
+  color: var(--cyan);
+  background-image:
+    linear-gradient(90deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(90deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(0deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(0deg, var(--cyan) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 6px 1px, 6px 1px, 1px 6px, 1px 6px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  border-color: transparent;
+  animation: bp-march .5s linear infinite;
+}
+.v-blueprint .ss-menubar-app.ss-attention::after {
+  content: '— HOLD';
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: .05em;
+}
+
+.v-blueprint .ss-menubar-clock {
+  font-family: var(--font-mono);
+  color: var(--line-dim);
+  letter-spacing: 0;
+}
+
+/* ---------- Dropdown: session schedule sheet ---------- */
+
+.v-blueprint .ss-dropdown {
+  background: transparent;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 3px var(--blue), inset 0 0 0 4px var(--line-faint);
+  padding: 14px 14px 6px;
+  margin-top: 24px;
+}
+
+.v-blueprint .ss-dropdown::before {
+  content: '◂  SESSIONS — QTY 6  ▸';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: -19px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  border-top: 1px solid var(--cyan);
+  border-bottom: 1px solid var(--cyan);
+  padding: 3px 0;
+  pointer-events: none;
+}
+
+.v-blueprint .ss-dropdown::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 9px;
+  height: 9px;
+  background-image:
+    linear-gradient(var(--line-dim), var(--line-dim)),
+    linear-gradient(90deg, var(--line-dim), var(--line-dim));
+  background-repeat: no-repeat;
+  background-position: center, center;
+  background-size: 100% 1px, 1px 100%;
+  pointer-events: none;
+}
+
+/* Two-line reflow (precedent: 05/06/07/08) — headline: dot + project;
+   control strip: terminal + model + effort + preset — so the schedule
+   entry fits the 340px sheet. */
+.v-blueprint .ss-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto auto;
+  grid-template-areas:
+    "dot  proj  proj  proj   proj"
+    "dot  term  model effort preset";
+  column-gap: 8px;
+  row-gap: 5px;
+  align-items: center;
+  padding: 8px 3px;
+  border-bottom: 1px solid var(--line-faint);
+  cursor: pointer;
+}
+.v-blueprint .ss-row:hover { border-left: 2px solid var(--cyan); padding-left: 1px; }
+.v-blueprint .ss-row:last-of-type { border-bottom: none; }
+
+/* ---------- State dot: outline / cross-hatch / solid + marching ---------- */
+
+.v-blueprint .ss-state-dot {
+  grid-area: dot;
+  align-self: start;
+  margin-top: 2px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--line-dim);
+  background: transparent;
+}
+.v-blueprint .ss-row.is-working .ss-state-dot {
+  border-color: var(--cyan);
+  background-image: repeating-linear-gradient(45deg, var(--cyan) 0 1px, transparent 1px 3px);
+}
+.v-blueprint .ss-row.is-awaiting .ss-state-dot {
+  border: 1px dashed var(--cyan);
+  background-color: var(--cyan);
+  animation: bp-blink .8s steps(2, jump-none) infinite;
+}
+.v-blueprint .ss-row.is-readonly .ss-state-dot { border-color: var(--line-faint); }
+
+/* ---------- Project / terminal readouts ---------- */
+
+.v-blueprint .ss-row-project {
+  grid-area: proj;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--line);
+}
+.v-blueprint .ss-row-terminal {
+  grid-area: term;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .02em;
+  color: var(--line-dim);
+}
+
+/* ---------- Chips: outlined instrument callouts ---------- */
+
+.v-blueprint .ss-chip-model,
+.v-blueprint .ss-chip-effort,
+.v-blueprint .ss-row-preset {
+  border: 1px solid var(--line-dim);
+  background: transparent;
+  color: var(--line);
+  cursor: pointer;
+}
+.v-blueprint .ss-chip-model:hover,
+.v-blueprint .ss-row-preset:hover { border-color: var(--cyan); color: var(--cyan); }
+
+.v-blueprint .ss-chip-model {
+  grid-area: model;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  padding: 3px 5px;
+  white-space: nowrap;
+}
+
+.v-blueprint .ss-chip-effort {
+  grid-area: effort;
+  padding: 3px 4px;
+}
+.v-blueprint .ss-chip-effort:hover { border-color: var(--cyan); }
+
+/* Cross-hatched effort bars — the signature fill technique: unlit =
+   hollow outline rect, lit = 45deg hatch pattern instead of a flat
+   color fill. */
+.v-blueprint .ss-effort-bars span {
+  display: inline-block;
+  width: 4px;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+  border: 1px solid var(--line-dim);
+  background: transparent;
+}
+.v-blueprint .ss-effort-bars span:nth-child(1) { height: 4px; }
+.v-blueprint .ss-effort-bars span:nth-child(2) { height: 7px; }
+.v-blueprint .ss-effort-bars span:nth-child(3) { height: 10px; }
+.v-blueprint .ss-effort-bars span:nth-child(4) { height: 13px; }
+.v-blueprint .ss-effort-bars span.on {
+  border-color: var(--cyan);
+  background-image: repeating-linear-gradient(45deg, var(--cyan) 0 1.5px, transparent 1.5px 3.5px);
+}
+
+.v-blueprint .ss-row-preset {
+  grid-area: preset;
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+/* Right-anchor: preset sits at the row's right edge, so its default
+   left:0 submenu would run past the dropdown/viewport edge. Offset
+   only — position stays owned by structure.css. */
+.v-blueprint .ss-row-preset .ss-menu { left: auto; right: 0; }
+
+/* ---------- Pending: marching-dashes selection outline ---------- */
+
+.v-blueprint .ss-chip-model.is-pending,
+.v-blueprint .ss-chip-effort.is-pending,
+.v-blueprint .ss-row-preset.is-pending,
+.v-blueprint .is-pending {
+  border-color: transparent;
+  background-image:
+    linear-gradient(90deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(90deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(0deg, var(--cyan) 50%, transparent 50%),
+    linear-gradient(0deg, var(--cyan) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 6px 1px, 6px 1px, 1px 6px, 1px 6px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: bp-march .5s linear infinite;
+}
+
+/* ---------- Read-only: dim by color (never opacity), stamped RO ---------- */
+
+.v-blueprint .ss-row.is-readonly { cursor: default; }
+.v-blueprint .ss-row.is-readonly .ss-row-project,
+.v-blueprint .ss-row.is-readonly .ss-row-terminal,
+.v-blueprint .ss-row.is-readonly .ss-chip-model,
+.v-blueprint .ss-row.is-readonly .ss-row-preset {
+  color: var(--line-dim);
+}
+.v-blueprint .ss-row.is-readonly .ss-chip-model,
+.v-blueprint .ss-row.is-readonly .ss-row-preset {
+  border-color: var(--line-faint);
+}
+.v-blueprint .ss-row.is-readonly .ss-effort-bars span.on {
+  border-color: var(--line-dim);
+  background-image: repeating-linear-gradient(45deg, var(--line-dim) 0 1.5px, transparent 1.5px 3.5px);
+}
+.v-blueprint .ss-row.is-readonly .ss-row-terminal::after {
+  content: '  —  RO';
+  color: var(--line-faint);
+  letter-spacing: .1em;
+}
+
+/* ---------- Submenus (model / effort / preset), badge columns ---------- */
+
+.v-blueprint .ss-menu {
+  background-color: var(--blue);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 2px var(--blue), inset 0 0 0 3px var(--line-faint);
+  padding: 4px;
+  margin-top: 3px;
+}
+.v-blueprint .ss-menu-item {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--line);
+  padding: 5px 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.v-blueprint .ss-menu-item:hover { color: var(--cyan); }
+.v-blueprint .ss-menu-item.is-active { color: var(--cyan); font-weight: 700; }
+.v-blueprint .ss-menu-item.is-active::before { content: '▸ '; }
+
+.v-blueprint .ss-dropdown-footer {
+  border-top: 1px solid var(--line-faint);
+  padding: 8px 3px 4px;
+  margin-top: 3px;
+  gap: 8px;
+}
+.v-blueprint .ss-dropdown-footer button {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--line);
+  background: transparent;
+  border: 1px solid var(--line-dim);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.v-blueprint .ss-dropdown-footer button:hover { color: var(--cyan); border-color: var(--cyan); }
+
+/* ---------- Desktop: drafting sheet + title block ---------- */
+
+.v-blueprint .ss-desktop {
+  background: transparent;
+}
+.v-blueprint .ss-desktop::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  background-image:
+    linear-gradient(var(--line-faint), var(--line-faint)), linear-gradient(90deg, var(--line-faint), var(--line-faint)),
+    linear-gradient(var(--line-faint), var(--line-faint)), linear-gradient(90deg, var(--line-faint), var(--line-faint)),
+    linear-gradient(var(--line-faint), var(--line-faint)), linear-gradient(90deg, var(--line-faint), var(--line-faint)),
+    linear-gradient(var(--line-faint), var(--line-faint)), linear-gradient(90deg, var(--line-faint), var(--line-faint));
+  background-repeat: no-repeat;
+  background-position:
+    0 0, 0 0,
+    100% 0, calc(100% - 8px) 0,
+    0 100%, 0 calc(100% - 8px),
+    100% 100%, calc(100% - 8px) 100%;
+  background-size:
+    8px 1px, 1px 8px,
+    8px 1px, 1px 8px,
+    8px 1px, 1px 8px,
+    8px 1px, 1px 8px;
+  pointer-events: none;
+}
+
+.v-blueprint .ss-desktop::after {
+  /* bottom offset cleared to sit above the fixed toast stack (bottom:16px,
+     right:16px, z-index:500 from structure.css) — toasts render nearest
+     the viewport's bottom edge and would otherwise sit directly on top
+     of a title block parked at bottom:14px. */
+  content: 'SESSIONSWITCH\A SCALE 1:1\A DWG NO. SS-001\A DATE 2026-07-06';
+  position: absolute;
+  right: 14px;
+  bottom: 190px;
+  white-space: pre;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: .04em;
+  color: var(--line);
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ---------- Windows: elevation drawings, section-marked ---------- */
+
+.v-blueprint .ss-window {
+  background: transparent;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 3px var(--blue), inset 0 0 0 4px var(--line-faint);
+  opacity: .68;
+}
+.v-blueprint .ss-window.is-front {
+  opacity: 1;
+  box-shadow: inset 0 0 0 3px var(--blue), inset 0 0 0 4px var(--cyan);
+}
+
+.v-blueprint .ss-window-title {
+  padding: 7px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--line-dim);
+  border-bottom: 1px solid var(--line-faint);
+}
+.v-blueprint .ss-window.is-front .ss-window-title { color: var(--line); }
+#w1 .ss-window-title::after { content: '   SECT. A-A\'' ; color: var(--cyan); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
+#w2 .ss-window-title::after { content: '   SECT. B-B\'' ; color: var(--cyan); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; }
+
+.v-blueprint .ss-window-body {
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--line-dim);
+}
+.v-blueprint .ss-window.is-front .ss-window-body { color: var(--line); }
+
+/* ---------- Badge: docked callout tag ---------- */
+
+.v-blueprint .ss-badge-summary {
+  background: var(--blue);
+  border: 1px solid var(--line);
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--line);
+  cursor: pointer;
+}
+.v-blueprint .ss-badge.is-open .ss-badge-summary { border-color: var(--cyan); color: var(--cyan); }
+#w1 .ss-badge-summary::before { content: 'A-A\'  '; color: var(--cyan); }
+#w2 .ss-badge-summary::before { content: 'B-B\'  '; color: var(--cyan); }
+
+.v-blueprint .ss-badge-summary .ss-effort-bars span { width: 3px; }
+.v-blueprint .ss-badge-summary .ss-effort-bars span:nth-child(1) { height: 3px; }
+.v-blueprint .ss-badge-summary .ss-effort-bars span:nth-child(2) { height: 5px; }
+.v-blueprint .ss-badge-summary .ss-effort-bars span:nth-child(3) { height: 7px; }
+.v-blueprint .ss-badge-summary .ss-effort-bars span:nth-child(4) { height: 9px; }
+
+.v-blueprint .ss-badge-panel {
+  background-color: var(--blue);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 2px var(--blue), inset 0 0 0 3px var(--line-faint);
+  padding: 5px;
+  margin-top: 5px;
+}
+.v-blueprint .ss-badge-col { padding: 0 7px; min-width: 78px; }
+.v-blueprint .ss-badge-col + .ss-badge-col { border-left: 1px solid var(--line-faint); }
+.v-blueprint .ss-badge-col .ss-menu-item { font-size: 9.5px; padding: 4px 5px; }
+
+/* ---------- Quick picker (⌘K): parts-list lookup box ---------- */
+
+.v-blueprint .ss-picker {
+  background-color: var(--blue);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 4px var(--blue), inset 0 0 0 5px var(--line), inset 0 0 0 9px var(--blue), 0 0 0 1px var(--blue-deep);
+  padding: 28px 20px 16px;
+  color: var(--line);
+  font-family: var(--font-mono);
+}
+.v-blueprint .ss-picker::before {
+  content: 'PARTS LIST — QUICK JUMP';
+  position: absolute;
+  top: 10px;
+  left: 20px;
+  right: 20px;
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--cyan);
+  pointer-events: none;
+}
+.v-blueprint .ss-picker::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 9px;
+  height: 9px;
+  background-image: linear-gradient(var(--line-dim), var(--line-dim)), linear-gradient(90deg, var(--line-dim), var(--line-dim));
+  background-repeat: no-repeat;
+  background-position: center, center;
+  background-size: 100% 1px, 1px 100%;
+  pointer-events: none;
+}
+
+.v-blueprint .ss-picker-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--line);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  letter-spacing: .02em;
+  padding: 0 0 8px;
+  outline: none;
+}
+.v-blueprint .ss-picker-input::placeholder { color: var(--line-faint); }
+
+.v-blueprint .ss-picker-session {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--line-dim);
+}
+.v-blueprint .ss-picker-session::before { content: 'TARGET — '; color: var(--cyan); }
+
+.v-blueprint .ss-picker-modes { margin-top: 14px; gap: 8px; }
+.v-blueprint .ss-picker-mode {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 5px 10px;
+  border: 1px solid var(--line-dim);
+  color: var(--line-dim);
+  cursor: pointer;
+}
+.v-blueprint .ss-picker-mode.is-active {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.v-blueprint .ss-picker-list {
+  margin-top: 12px;
+  border-top: 1px solid var(--line-faint);
+  padding-top: 6px;
+}
+.v-blueprint .ss-picker-option {
+  font-size: 12.5px;
+  padding: 6px 8px;
+  color: var(--line-dim);
+  border-bottom: 1px solid var(--line-faint);
+}
+.v-blueprint .ss-picker-option:hover { color: var(--line); }
+.v-blueprint .ss-picker-option.is-active { color: var(--cyan); border-bottom-color: var(--cyan); }
+.v-blueprint .ss-picker-option.is-active::before { content: '▸ '; }
+
+/* ---------- Toasts: revision-table stamps ---------- */
+
+.v-blueprint .ss-toast-wrap { gap: 8px; }
+
+.v-blueprint .ss-toast {
+  position: relative;
+  min-width: 220px;
+  padding: 9px 12px 9px 11px;
+  background-color: var(--blue);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--line);
+  animation: bp-toast-in .18s ease-out;
+}
+.v-blueprint .ss-toast::before {
+  display: block;
+  font-family: var(--font-label);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+  margin: -9px -12px 6px -11px;
+  padding: 4px 11px;
+  border-bottom: 1px solid var(--line-faint);
+}
+.v-blueprint .ss-toast.is-verified { border-left-color: var(--cyan); }
+.v-blueprint .ss-toast.is-verified::before { content: 'REV A — APPROVED'; color: var(--cyan); }
+.v-blueprint .ss-toast.is-clamped { border-left-color: var(--cyan); }
+.v-blueprint .ss-toast.is-clamped::before { content: 'HOLD — POLICY'; color: var(--cyan); }
+.v-blueprint .ss-toast.is-rejected {
+  border-left-color: var(--line);
+  animation: bp-toast-in .18s ease-out, bp-blink 1s steps(2, jump-none) infinite;
+}
+.v-blueprint .ss-toast.is-rejected::before { content: 'REV — REJECTED'; color: var(--line); }
+
+/* ---------- Lab link ---------- */
+
+.v-blueprint .ss-lab-link {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--line-dim);
+  background: transparent;
+  border: 1px solid var(--line-dim);
+  padding: 5px 9px;
+}
+.v-blueprint .ss-lab-link:hover { color: var(--cyan); border-color: var(--cyan); }
+
+/* ---------- Keyframes ---------- */
+
+@keyframes bp-march {
+  to {
+    background-position: 6px 0, -6px 100%, 0 -6px, 100% 6px;
+  }
+}
+@keyframes bp-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .3; }
+}
+@keyframes bp-toast-in {
+  from { transform: translateX(10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-blueprint,
+  .v-blueprint * {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
+  .v-blueprint .ss-menubar-app.ss-attention,
+  .v-blueprint .ss-row.is-awaiting .ss-state-dot,
+  .v-blueprint .is-pending,
+  .v-blueprint .ss-toast.is-rejected {
+    animation: none !important;
+    opacity: 1;
+  }
+}
