@@ -9,5 +9,5 @@ export const VARIANTS = [
   { dir: '08-avionics-cockpit',   name: 'Avionics Cockpit',   vibe: 'Instrument panel — gauges, annunciators, CAUTION' },
   { dir: '09-blueprint',          name: 'Blueprint',          vibe: 'Technical drawing — dimension lines, title block' },
   { dir: '10-clay-pop',           name: 'Clay Pop',           vibe: 'Squishy claymorphism — jelly buttons, confetti' },
-  { dir: '11-brutalist-mono',     name: 'Brutalist Mono',     vibe: 'B&W terminal — live glyph rain, sparse color signals' },
+  { dir: '11-mono-glass',         name: 'Mono Glass',         vibe: 'Dark B&W glass — live glyph rain, sparse color signals' },
 ];

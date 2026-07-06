@@ -1,0 +1,469 @@
+/* Mono Glass — Cupertino Glass reworked dark: near-black frosted vibrancy,
+   strictly black & white chrome, with sparse accent signals (amber/cyan/red)
+   reserved for state + selection feedback only. A live glyph-rain layer
+   (fx.js) runs behind the desktop and blurs through every frosted panel. */
+
+body.ss.v-mono-glass {
+  --bg: radial-gradient(ellipse at 30% 20%, #1c1c20 0%, #0a0a0c 70%);
+  --panel: rgba(22, 22, 24, .55);
+  --panel-solid: rgba(20, 20, 22, .92);
+  --text: #f2f2f2;
+  --text-dim: #9a9a9a;
+  --hairline: rgba(255, 255, 255, .14);
+  --amber: #ffb000;
+  --cyan: #00e5ff;
+  --red: #ff3b3b;
+  --idle: #6e6e73;
+  --working: #ffffff;
+  --awaiting: #ffb000;
+  --danger: #ff3b3b;
+  --clamped: #ffb000;
+
+  background: var(--bg) fixed;
+  color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-mono-glass .ss-menubar {
+  background: rgba(20, 20, 22, .5);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border-bottom: 1px solid var(--hairline);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.v-mono-glass .ss-menubar-app {
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: background-color .15s ease;
+}
+.v-mono-glass .ss-menubar-app:hover {
+  background: rgba(255, 255, 255, .08);
+}
+.v-mono-glass .ss-menubar-app.ss-attention {
+  color: var(--amber);
+  animation: attention-pulse 1.6s ease-in-out infinite;
+}
+.v-mono-glass .ss-menubar-app.ss-attention::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+.v-mono-glass .ss-menubar-clock {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes attention-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+
+/* ---------- Dropdown ---------- */
+
+.v-mono-glass .ss-dropdown {
+  background: var(--panel);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  padding: 6px;
+  margin-top: 4px;
+  transform-origin: top right;
+  animation: dropdown-in .22s cubic-bezier(.2, 1.4, .4, 1);
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: scale(.94) translateY(-6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.v-mono-glass .ss-row {
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color .12s ease;
+}
+.v-mono-glass .ss-row:hover {
+  background: rgba(255, 255, 255, .08);
+}
+.v-mono-glass .ss-row + .ss-row {
+  margin-top: 1px;
+}
+
+.v-mono-glass .ss-state-dot {
+  border-radius: 50%;
+  background: var(--idle);
+}
+.v-mono-glass .ss-row.is-working .ss-state-dot {
+  background: var(--working);
+  box-shadow: 0 0 6px rgba(255, 255, 255, .8);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+.v-mono-glass .ss-row.is-awaiting .ss-state-dot {
+  background: var(--awaiting);
+  box-shadow: 0 0 6px var(--awaiting);
+}
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+.v-mono-glass .ss-row.is-readonly {
+  color: var(--text-dim);
+}
+.v-mono-glass .ss-row.is-readonly::after {
+  content: '🔒';
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 11px;
+  flex: none;
+}
+
+.v-mono-glass .ss-row-project {
+  font-weight: 500;
+}
+.v-mono-glass .ss-row-terminal {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.v-mono-glass .ss-chip-model,
+.v-mono-glass .ss-chip-effort,
+.v-mono-glass .ss-row-preset {
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .08);
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.v-mono-glass .ss-chip-model:hover,
+.v-mono-glass .ss-chip-effort:hover,
+.v-mono-glass .ss-row-preset:hover {
+  background: rgba(255, 255, 255, .16);
+}
+
+.v-mono-glass .ss-effort-bars span {
+  opacity: .3;
+  font-size: 10px;
+}
+.v-mono-glass .ss-effort-bars span.on {
+  opacity: 1;
+  color: var(--text);
+}
+
+.v-mono-glass .is-pending {
+  animation: pending-ring 1s ease-in-out infinite;
+}
+@keyframes pending-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 0, .6); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 176, 0, 0); }
+}
+
+.v-mono-glass .ss-menu {
+  background: var(--panel-solid);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  padding: 4px;
+  margin-top: 4px;
+  transform-origin: top left;
+  transition: transform .35s cubic-bezier(.2, 1.4, .4, 1);
+  animation: menu-in .22s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(.92) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.v-mono-glass .ss-menu-item {
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.v-mono-glass .ss-menu-item:hover {
+  background: rgba(255, 255, 255, .12);
+  color: var(--text);
+}
+.v-mono-glass .ss-menu-item.is-active {
+  background: rgba(0, 229, 255, .14);
+  color: var(--cyan);
+  font-weight: 600;
+}
+.v-mono-glass .ss-menu-item.is-active:hover {
+  background: rgba(0, 229, 255, .22);
+  color: var(--cyan);
+}
+
+.v-mono-glass .ss-dropdown-footer {
+  border-top: 1px solid var(--hairline);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.v-mono-glass .ss-dropdown-footer button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+}
+.v-mono-glass .ss-dropdown-footer button:hover {
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+}
+
+/* ---------- Desktop + windows ---------- */
+
+.v-mono-glass .ss-desktop {
+  background: transparent;
+}
+
+.v-mono-glass .ss-window {
+  background: var(--panel);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  opacity: .82;
+  transition: opacity .2s ease, box-shadow .2s ease;
+}
+.v-mono-glass .ss-window.is-front {
+  opacity: 1;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .6);
+}
+
+.v-mono-glass .ss-window-title {
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, .06);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 10px 10px 0 0;
+}
+.v-mono-glass .ss-window-title::before {
+  content: '● ● ●';
+  display: block;
+  letter-spacing: 3px;
+  font-size: 8px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.v-mono-glass .ss-window-body {
+  padding: 12px;
+  font: 12px/1.6 'SF Mono', Menlo, monospace;
+  color: rgba(242, 242, 242, .82);
+  background: rgba(12, 12, 14, .85);
+  border-radius: 0 0 10px 10px;
+}
+
+/* ---------- Badge ---------- */
+
+.v-mono-glass .ss-badge {
+  transition: transform .35s cubic-bezier(.2, 1.4, .4, 1);
+}
+
+.v-mono-glass .ss-badge-summary {
+  background: var(--panel-solid);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.v-mono-glass .ss-badge.is-open .ss-badge-summary {
+  background: rgba(0, 229, 255, .14);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.v-mono-glass .ss-badge-panel {
+  margin-top: 6px;
+  background: var(--panel-solid);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+  padding: 6px;
+  gap: 4px;
+  transform-origin: top right;
+  animation: menu-in .3s cubic-bezier(.2, 1.4, .4, 1);
+}
+.v-mono-glass .ss-badge-col {
+  min-width: 96px;
+  padding: 0 6px;
+}
+.v-mono-glass .ss-badge-col + .ss-badge-col {
+  border-left: 1px solid var(--hairline);
+}
+.v-mono-glass .ss-badge-col .ss-menu-item {
+  font-size: 11px;
+}
+
+/* ---------- Quick picker ---------- */
+
+.v-mono-glass .ss-picker {
+  background: rgba(20, 20, 22, .75);
+  backdrop-filter: blur(30px) saturate(100%);
+  -webkit-backdrop-filter: blur(30px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .55);
+  padding: 14px;
+  animation: picker-in .25s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes picker-in {
+  from { opacity: 0; transform: translate(-50%, -54%) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.v-mono-glass .ss-picker-input {
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--text);
+  font: 20px/1.3 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-weight: 300;
+  padding: 10px 14px;
+  outline: none;
+}
+.v-mono-glass .ss-picker-input:focus {
+  border-color: var(--cyan);
+}
+
+.v-mono-glass .ss-picker-session {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.v-mono-glass .ss-picker-modes {
+  margin-top: 10px;
+  gap: 6px;
+}
+.v-mono-glass .ss-picker-mode {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.v-mono-glass .ss-picker-mode.is-active {
+  background: rgba(0, 229, 255, .14);
+  color: var(--cyan);
+}
+
+.v-mono-glass .ss-picker-list {
+  margin-top: 8px;
+}
+.v-mono-glass .ss-picker-option {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.v-mono-glass .ss-picker-option.is-active {
+  background: rgba(0, 229, 255, .14);
+  color: var(--cyan);
+}
+
+/* ---------- Toasts ---------- */
+
+.v-mono-glass .ss-toast {
+  background: var(--panel-solid);
+  backdrop-filter: blur(24px) saturate(100%);
+  -webkit-backdrop-filter: blur(24px) saturate(100%);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  animation: toast-in .25s cubic-bezier(.2, 1.4, .4, 1);
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.v-mono-glass .ss-toast.is-verified {
+  border-color: var(--cyan);
+  background: linear-gradient(rgba(0, 229, 255, .1), rgba(0, 229, 255, .1)), var(--panel-solid);
+}
+.v-mono-glass .ss-toast.is-clamped {
+  border-color: var(--amber);
+  background: linear-gradient(rgba(255, 176, 0, .1), rgba(255, 176, 0, .1)), var(--panel-solid);
+}
+.v-mono-glass .ss-toast.is-rejected {
+  border-color: var(--red);
+  background: linear-gradient(rgba(255, 59, 59, .1), rgba(255, 59, 59, .1)), var(--panel-solid);
+}
+
+/* ---------- Lab link ---------- */
+
+.v-mono-glass .ss-lab-link {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: none;
+  background: rgba(20, 20, 22, .5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+.v-mono-glass .ss-lab-link:hover {
+  color: var(--text);
+  background: rgba(20, 20, 22, .7);
+}
+
+/* ---------- Live glyph rain (fx.js) ---------- */
+
+.fx-rain { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.fx-col {
+  position: absolute; top: 0; white-space: pre;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  line-height: 1.1; color: #2e2e33;
+  animation: fx-fall linear infinite;
+}
+@keyframes fx-fall { from { transform: translateY(-100%); } to { transform: translateY(100vh); } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-col { animation: none; opacity: .35; }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-mono-glass * {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
+}
