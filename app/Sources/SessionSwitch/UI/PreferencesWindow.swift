@@ -179,8 +179,13 @@ struct PreferencesWindow: View {
 }
 
 /// One live Automation-permission status row (see `Permissions`). Computes
-/// on `.onAppear`/refresh rather than every SwiftUI re-render, since
-/// `AEDeterminePermissionToAutomateTarget` shells out to AppleEvents.
+/// on `.onAppear`/refresh rather than every SwiftUI re-render, and always
+/// OFF the main thread: `AEDeterminePermissionToAutomateTarget`'s own header
+/// says "Do not call this function on your main thread because it may take
+/// arbitrarily long" -- a slow TCC round-trip would otherwise hang the whole
+/// menu-bar app (the exact hazard `Injector` already solves with its
+/// background `executeQueue`). The row shows "checking…" until the
+/// background check hops its result back onto the main queue.
 private struct PermissionRow: View {
     let name: String
     let bundleID: String
@@ -199,7 +204,14 @@ private struct PermissionRow: View {
     }
 
     private func refresh() {
-        status = Permissions.automationStatus(for: bundleID)
+        status = "checking…"
+        let bundleID = self.bundleID
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Permissions.automationStatus(for: bundleID)
+            DispatchQueue.main.async {
+                self.status = result
+            }
+        }
     }
 
     private func color(for status: String) -> Color {

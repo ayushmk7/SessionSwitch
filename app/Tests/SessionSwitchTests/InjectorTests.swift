@@ -461,7 +461,7 @@ final class InjectorTests: XCTestCase {
         let suiteName = "com.sessionswitch.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(false, forKey: "inject.queueWhenBusy")
+        defaults.set(false, forKey: Injector.queueWhenBusyDefaultsKey)
 
         let recentMtime = Date() // within the 10s working threshold
         let (store, _, _) = makeStoreWithOneSession(
