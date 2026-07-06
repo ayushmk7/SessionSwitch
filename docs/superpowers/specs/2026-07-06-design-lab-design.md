@@ -52,7 +52,8 @@ http, not file://). No other tooling.
 - **Sessions (6):** realistic project dirs (`~/work/api-gateway`,
   `~/oss/zig-parser`, etc.) spread across Terminal.app, iTerm2, VS Code,
   JetBrains. States: idle / working / awaiting-permission. One session is
-  read-only (SSH remote) per FR-5.
+  read-only (SSH remote) per FR-5; one is org-capped (effort ceiling `medium`)
+  to drive the clamp case.
 - **Model catalog:** Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5 with aliases and
   per-model supported effort levels (Haiku: none; others: low/medium/high, Fable
   adds max). Mirrors FR-11/FR-12 shape.
@@ -66,10 +67,11 @@ Headless store. No DOM. API:
 - `getState()` / `subscribe(fn)` — pub/sub snapshot of sessions + catalog + presets.
 - `applyModel(sessionId, modelId)`, `applyEffort(sessionId, level)`,
   `applyPreset(sessionId, presetId)` — each sets a `pending` flag, then after a
-  short fake latency resolves to `verified` (or `clamped` for one scripted case,
-  mirroring FR-9/FR-35: requesting `max` on Opus clamps to `high` with reason
-  "limited by org policy").
-- Invalid model+effort combos rejected with the fallback level reported (FR-12).
+  short fake latency resolves to `verified`, or to `clamped` for the one
+  scripted org-capped session (mirroring FR-9/FR-35: requesting `high` there
+  applies `medium` with reason "limited by org policy").
+- Invalid model+effort combos (e.g., `max` on Opus 4.8, any effort on Haiku)
+  are a distinct case: rejected with the fallback level reported (FR-12).
 - Read-only sessions reject all applies with reason (FR-5).
 - Ambient simulation: a ticker randomly flips sessions between idle/working so
   every variant feels alive.
@@ -102,8 +104,10 @@ Default DOM builders with stable class hooks (`ss-menubar`, `ss-dropdown`,
 
 - Grid of 10 cards; each card is a live scaled-down iframe of the variant plus
   name + one-line vibe.
-- Click card → variant opens fullscreen (navigation, not overlay). Esc or "← Lab"
-  chrome returns to hub. ←/→ keys cycle variants; digits 1–0 jump.
+- Click card → variant opens fullscreen (navigation, not overlay). A small
+  fixed "← Lab" link (injected by scaffold) returns to the hub; Esc is reserved
+  for closing the picker, never for navigation. ←/→ keys cycle variants; digits
+  1–0 jump (hub and variant pages alike).
 - Hub itself gets a neutral dark identity so it doesn't bias the vote.
 
 ## Variant Creative Briefs
