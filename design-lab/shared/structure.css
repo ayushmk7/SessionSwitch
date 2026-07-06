@@ -1,0 +1,284 @@
+/* structure.css — layout mechanics ONLY.
+   No colors, no fonts, no borders, no shadows, no animation.
+   Every variant's style.css supplies 100% of the look; this file only
+   answers "where is it and how big is it." */
+
+:root {
+  --ss-menubar-h: 28px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body.ss {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Menu bar ---------- */
+
+.ss-menubar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--ss-menubar-h, 28px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 0 12px;
+}
+
+.ss-menubar-app {
+  position: relative;
+  flex: none;
+}
+
+.ss-menubar-clock {
+  flex: none;
+}
+
+/* ---------- Dropdown ---------- */
+
+.ss-dropdown {
+  display: none;
+  position: absolute;
+  top: var(--ss-menubar-h, 28px);
+  right: 0;
+  z-index: 210;
+  width: 340px;
+  max-width: 92vw;
+}
+
+.ss-dropdown.ss-open {
+  display: block;
+}
+
+.ss-row {
+  position: static;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.ss-state-dot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+}
+
+.ss-row-project {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-row-terminal {
+  flex: none;
+  white-space: nowrap;
+}
+
+.ss-chip-model,
+.ss-chip-effort,
+.ss-row-preset {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ss-effort-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.ss-dropdown-footer {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+/* ---------- Menus (model / effort / preset submenus, badge columns) ---------- */
+
+.ss-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 220;
+  min-width: 100%;
+  width: max-content;
+  max-width: 60vw;
+}
+
+.ss-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+/* ---------- Desktop + windows ---------- */
+
+.ss-desktop {
+  position: absolute;
+  top: var(--ss-menubar-h, 28px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.ss-window {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-window.is-front {
+  z-index: 20;
+}
+
+#w1 {
+  left: 6%;
+  top: 16%;
+  width: 46%;
+}
+
+#w2 {
+  left: 40%;
+  top: 44%;
+  width: 50%;
+}
+
+.ss-window-title {
+  flex: none;
+}
+
+.ss-window-body {
+  flex: 1 1 auto;
+  min-height: 160px;
+  overflow: auto;
+}
+
+.ss-window-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Badge (docked to its parent window) ---------- */
+
+.ss-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 30;
+}
+
+.ss-badge-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ss-badge-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: row;
+}
+
+.ss-badge-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Quick picker (⌘K) ---------- */
+
+.ss-picker {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 400;
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.ss-picker.ss-open {
+  display: flex;
+}
+
+.ss-picker-input {
+  display: block;
+  width: 100%;
+  flex: none;
+}
+
+.ss-picker-session {
+  flex: none;
+}
+
+.ss-picker-modes {
+  display: flex;
+  flex: none;
+}
+
+.ss-picker-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  max-height: 50vh;
+}
+
+.ss-picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+/* ---------- Toast stack ---------- */
+
+.ss-toast-wrap {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.ss-toast {
+  width: max-content;
+  max-width: 100%;
+}
+
+/* ---------- Lab link ---------- */
+
+.ss-lab-link {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 300;
+}
