@@ -1,0 +1,560 @@
+/* E-Ink Paper — warm analog calm. Soft paper, pencil-shaded state dots,
+   rubber-stamped chips, page-turn unfolds, margin-note toasts with a
+   manicule. Zero glow, zero saturation anywhere except the single
+   rubber-stamp red — this is a reading device, not a display. */
+
+body.ss.v-eink-paper {
+  --paper: #f4efe6;
+  --paper-card: #ece4d3;
+  --paper-card-2: #e4dac5;
+  --ink: #2b2925;
+  --faded: #8a857c;
+  --hair: rgba(43, 41, 37, .22);
+  --hair-soft: rgba(43, 41, 37, .12);
+  --stamp: #b5442e;
+
+  --font-display: Georgia, 'Iowan Old Style', serif;
+  --font-body: Seravek, Verdana, sans-serif;
+  --font-mono: ui-monospace, 'Courier New', monospace;
+
+  /* Paper grain: two dot fields at different pitches, both very faint.
+     Reused (via var()) on every card surface so the whole page reads as
+     one sheet of paper rather than flat panels stacked on it. */
+  --grain:
+    radial-gradient(circle, rgba(43, 41, 37, .05) 1px, transparent 1.3px),
+    radial-gradient(circle, rgba(43, 41, 37, .04) 1px, transparent 1.3px);
+  --grain-size: 3px 3px, 7px 7px;
+  --grain-pos: 0 0, 2px 4px;
+
+  perspective: 900px; /* shared 3D space so page-turn unfolds have real depth */
+  background: var(--paper);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.v-eink-paper a { color: inherit; text-decoration: none; }
+.v-eink-paper button { font-family: inherit; }
+
+/* ---------- Page-turn unfold (shared) ----------
+   Brief: "menus/pickers unfold with a page-turn — single transform
+   origin-top rotateX 200ms". Applied to every freshly-opened panel:
+   dropdown, submenus, badge panel, quick picker. Disabled under
+   reduced motion (see bottom of file). */
+@keyframes ss-page-turn {
+  from { transform: rotateX(-90deg); opacity: 0; }
+  to   { transform: rotateX(0deg);   opacity: 1; }
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-eink-paper .ss-menubar {
+  background: var(--paper-card);
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+}
+
+.v-eink-paper .ss-menubar-app {
+  cursor: pointer;
+  color: var(--ink);
+  letter-spacing: .01em;
+}
+.v-eink-paper .ss-menubar-app:hover { color: var(--stamp); }
+.v-eink-paper .ss-menubar-app.ss-attention {
+  color: var(--stamp);
+  font-weight: bold;
+}
+.v-eink-paper .ss-menubar-app.ss-attention::after {
+  content: ' \2711'; /* pen-nib mark: something needs your hand */
+}
+
+.v-eink-paper .ss-menubar-clock {
+  color: var(--faded);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Desktop ---------- */
+
+.v-eink-paper .ss-desktop {
+  background: var(--paper);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+}
+
+/* ---------- Dropdown ---------- */
+
+.v-eink-paper .ss-dropdown {
+  background: var(--paper-card);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  border: 1px solid var(--hair);
+  border-top: none;
+  box-shadow: 0 10px 24px rgba(43, 41, 37, .16);
+  padding: 4px 14px 0;
+  transform-origin: top center;
+}
+.v-eink-paper .ss-dropdown.ss-open {
+  animation: ss-page-turn 200ms ease-out;
+}
+
+/* Two-line layout: 340px is too tight for dot + serif project name +
+   terminal + three stamped chips on one row, so line 1 carries the
+   headline (dot + project) and line 2 carries the metadata + controls.
+   Allowed override per hazard notes (variant 05 set this precedent). */
+.v-eink-paper .ss-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto auto;
+  grid-template-areas:
+    "dot   proj  proj   proj   proj"
+    "dot   term  model  effort preset";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 7px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--hair-soft);
+  cursor: pointer;
+}
+.v-eink-paper .ss-row:last-of-type { border-bottom: none; }
+.v-eink-paper .ss-row:hover { background: rgba(43, 41, 37, .035); }
+
+/* ---------- State dots: pencil-shaded circles ---------- */
+
+.v-eink-paper .ss-state-dot {
+  grid-area: dot;
+  align-self: start;
+  margin-top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.4px solid var(--faded);
+  box-shadow: none;
+}
+.v-eink-paper .ss-row.is-idle .ss-state-dot {
+  /* faint pencil outline, ungraphited — nothing to report */
+  background: radial-gradient(circle at 35% 30%, rgba(43, 41, 37, .18), transparent 70%);
+}
+.v-eink-paper .ss-row.is-working .ss-state-dot {
+  border-color: var(--ink);
+  background: radial-gradient(circle at 32% 28%, #6b6660 0%, var(--ink) 75%);
+  animation: ss-pencil-breathe 2.2s ease-in-out infinite;
+}
+.v-eink-paper .ss-row.is-awaiting .ss-state-dot {
+  border-color: var(--stamp);
+  background: radial-gradient(circle at 32% 28%, #d05f45 0%, var(--stamp) 75%);
+}
+@keyframes ss-pencil-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+
+.v-eink-paper .ss-row-project {
+  grid-area: proj;
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.v-eink-paper .ss-row-terminal {
+  grid-area: term;
+  color: var(--faded);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* ---------- Chips: rubber-stamped labels ---------- */
+
+.v-eink-paper .ss-chip-model,
+.v-eink-paper .ss-chip-effort {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--stamp);
+  border: 1.5px solid var(--stamp);
+  border-radius: 3px;
+  padding: 2px 7px;
+  transform: rotate(-1deg);
+  text-shadow: 0 0 .4px var(--stamp);
+  cursor: pointer;
+  background: rgba(181, 68, 46, .04);
+}
+.v-eink-paper .ss-chip-effort { transform: rotate(1deg); }
+.v-eink-paper .ss-chip-model:hover,
+.v-eink-paper .ss-chip-effort:hover {
+  background: rgba(181, 68, 46, .1);
+}
+.v-eink-paper .ss-chip-model { grid-area: model; }
+.v-eink-paper .ss-chip-effort { grid-area: effort; }
+
+/* Effort bars: graphite pencil marks, hatched when lit. */
+.v-eink-paper .ss-effort-bars {
+  height: 9px;
+  gap: 2px;
+}
+.v-eink-paper .ss-effort-bars span {
+  display: inline-block;
+  width: 3px;
+  font-size: 0;
+  background: rgba(43, 41, 37, .18);
+}
+.v-eink-paper .ss-effort-bars span:nth-child(1) { height: 4px; }
+.v-eink-paper .ss-effort-bars span:nth-child(2) { height: 6px; }
+.v-eink-paper .ss-effort-bars span:nth-child(3) { height: 8px; }
+.v-eink-paper .ss-effort-bars span:nth-child(4) { height: 9px; }
+.v-eink-paper .ss-effort-bars span.on {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--stamp) 0 1px,
+    rgba(181, 68, 46, .55) 1px 2px
+  );
+}
+
+/* Preset: a plain marginalia tab, not a stamp — dashed, ink-colored. */
+.v-eink-paper .ss-row-preset {
+  grid-area: preset;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--faded);
+  border: 1px dashed var(--hair);
+  border-radius: 2px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.v-eink-paper .ss-row-preset:hover {
+  color: var(--ink);
+  border-color: var(--faded);
+}
+
+/* Read-only: dim by color only (never opacity), plus a marginal note. */
+.v-eink-paper .ss-row.is-readonly { cursor: default; }
+.v-eink-paper .ss-row.is-readonly .ss-row-project,
+.v-eink-paper .ss-row.is-readonly .ss-row-terminal,
+.v-eink-paper .ss-row.is-readonly .ss-chip-model,
+.v-eink-paper .ss-row.is-readonly .ss-chip-effort,
+.v-eink-paper .ss-row.is-readonly .ss-row-preset {
+  color: var(--faded);
+  border-color: var(--hair);
+  text-shadow: none;
+}
+.v-eink-paper .ss-row.is-readonly .ss-state-dot {
+  border-color: var(--hair);
+}
+.v-eink-paper .ss-row.is-readonly .ss-row-project::after {
+  content: ' \261E read-only';
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--faded);
+}
+
+/* Pending: pulsing pencil-dash outline on the chip being applied. */
+.v-eink-paper .is-pending {
+  outline: 1.5px dashed var(--ink);
+  outline-offset: 2px;
+  animation: ss-pending-pulse 1.1s ease-in-out infinite;
+}
+@keyframes ss-pending-pulse {
+  0%, 100% { outline-color: var(--ink); }
+  50% { outline-color: transparent; }
+}
+
+/* ---------- Submenus (model / effort / preset) ---------- */
+
+.v-eink-paper .ss-menu {
+  background: var(--paper-card-2);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  border: 1px solid var(--hair);
+  box-shadow: 0 6px 18px rgba(43, 41, 37, .2);
+  padding: 4px;
+  margin-top: 4px;
+  transform-origin: top center;
+  animation: ss-page-turn 200ms ease-out;
+}
+/* The preset chip sits at the row's right edge; its default left:0
+   submenu would run off the right-anchored dropdown's right edge.
+   Offset only — position stays as structure.css set it. */
+.v-eink-paper .ss-row-preset .ss-menu {
+  left: auto;
+  right: 0;
+}
+
+.v-eink-paper .ss-menu-item {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--ink);
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.v-eink-paper .ss-menu-item:hover { background: rgba(43, 41, 37, .06); }
+.v-eink-paper .ss-menu-item.is-active {
+  color: var(--stamp);
+  font-weight: bold;
+}
+.v-eink-paper .ss-menu-item.is-active::before {
+  content: '\261E ';
+}
+
+.v-eink-paper .ss-dropdown-footer {
+  padding: 10px 2px 12px;
+  border-top: 1px solid var(--hair-soft);
+  margin-top: 2px;
+}
+.v-eink-paper .ss-dropdown-footer button {
+  background: none;
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  color: var(--ink);
+  font-size: 11.5px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.v-eink-paper .ss-dropdown-footer button:hover {
+  border-color: var(--stamp);
+  color: var(--stamp);
+}
+
+/* ---------- Windows ---------- */
+
+.v-eink-paper .ss-window {
+  background: var(--paper-card);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  border: 1px solid var(--hair);
+  box-shadow: 0 8px 20px rgba(43, 41, 37, .14);
+}
+.v-eink-paper .ss-window.is-front {
+  border-color: var(--ink);
+  box-shadow: 0 14px 30px rgba(43, 41, 37, .22);
+}
+
+.v-eink-paper .ss-window-title {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--faded);
+}
+.v-eink-paper .ss-window.is-front .ss-window-title {
+  color: var(--ink);
+  font-weight: bold;
+}
+
+.v-eink-paper .ss-window-body {
+  padding: 12px;
+  color: var(--faded);
+}
+.v-eink-paper .ss-window.is-front .ss-window-body { color: var(--ink); }
+.v-eink-paper .ss-window-body pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- Badge ---------- */
+
+.v-eink-paper .ss-badge-summary {
+  background: var(--paper-card-2);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(43, 41, 37, .14);
+}
+.v-eink-paper .ss-badge.is-open .ss-badge-summary {
+  border-color: var(--stamp);
+  color: var(--stamp);
+}
+
+.v-eink-paper .ss-badge-panel {
+  background: var(--paper-card-2);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  border: 1px solid var(--hair);
+  box-shadow: 0 10px 22px rgba(43, 41, 37, .2);
+  margin-top: 6px;
+  padding: 6px;
+  gap: 6px;
+  transform-origin: top center;
+  animation: ss-page-turn 200ms ease-out;
+}
+.v-eink-paper .ss-badge-col {
+  min-width: 92px;
+  padding: 0 6px;
+}
+.v-eink-paper .ss-badge-col + .ss-badge-col {
+  border-left: 1px solid var(--hair-soft);
+}
+.v-eink-paper .ss-badge-col .ss-menu-item {
+  font-size: 11.5px;
+  padding: 4px 6px;
+}
+
+/* ---------- Quick picker (⌘K) ---------- */
+
+.v-eink-paper .ss-picker {
+  background: var(--paper-card);
+  background-image: var(--grain);
+  background-size: var(--grain-size);
+  background-position: var(--grain-pos);
+  border: 1px solid var(--hair);
+  box-shadow: 0 20px 48px rgba(43, 41, 37, .28);
+  border-radius: 4px;
+  padding: 20px 22px;
+  transform-origin: top center;
+}
+.v-eink-paper .ss-picker.ss-open {
+  animation: ss-page-turn 200ms ease-out;
+}
+
+.v-eink-paper .ss-picker-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--hair);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 24px;
+  padding: 0 0 8px;
+  outline: none;
+}
+.v-eink-paper .ss-picker-input::placeholder { color: var(--faded); }
+.v-eink-paper .ss-picker-input:focus { border-bottom-color: var(--stamp); }
+
+.v-eink-paper .ss-picker-session {
+  margin-top: 10px;
+  color: var(--faded);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.v-eink-paper .ss-picker-modes {
+  margin-top: 14px;
+  gap: 16px;
+}
+.v-eink-paper .ss-picker-mode {
+  color: var(--faded);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  cursor: pointer;
+  padding-bottom: 3px;
+  border-bottom: 2px solid transparent;
+}
+.v-eink-paper .ss-picker-mode:hover { color: var(--ink); }
+.v-eink-paper .ss-picker-mode.is-active {
+  color: var(--stamp);
+  border-bottom-color: var(--stamp);
+}
+
+.v-eink-paper .ss-picker-list {
+  margin-top: 12px;
+  border-top: 1px solid var(--hair-soft);
+  padding-top: 6px;
+}
+.v-eink-paper .ss-picker-option {
+  padding: 8px 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.v-eink-paper .ss-picker-option:hover { background: rgba(43, 41, 37, .06); }
+.v-eink-paper .ss-picker-option.is-active {
+  background: rgba(181, 68, 46, .08);
+  color: var(--stamp);
+}
+.v-eink-paper .ss-picker-option.is-active::before { content: '\261E  '; }
+
+/* ---------- Toasts: margin notes with a manicule ---------- */
+
+.v-eink-paper .ss-toast-wrap { background: transparent; }
+
+.v-eink-paper .ss-toast {
+  background: var(--paper-card);
+  border-left: 3px solid var(--faded);
+  box-shadow: 0 6px 16px rgba(43, 41, 37, .18);
+  padding: 8px 12px 8px 10px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--ink);
+  /* e-ink "refresh": a brief full-invert flash then settle, applied at
+     the moment the toast (the settle signal) appears — see brief note
+     on .is-pending vs toast; this variant animates the toast. */
+  animation: ss-eink-flash 260ms steps(1, jump-end);
+}
+.v-eink-paper .ss-toast::before {
+  content: '\261E';
+  margin-right: 6px;
+  color: var(--faded);
+}
+.v-eink-paper .ss-toast.is-verified {
+  border-left-color: var(--ink);
+}
+.v-eink-paper .ss-toast.is-clamped {
+  border-left-color: var(--faded);
+  border-left-style: dashed;
+}
+.v-eink-paper .ss-toast.is-rejected {
+  border-left-color: var(--stamp);
+  color: var(--stamp);
+}
+.v-eink-paper .ss-toast.is-rejected::before { color: var(--stamp); }
+
+@keyframes ss-eink-flash {
+  0%, 30% { filter: invert(1); }
+  31%, 100% { filter: invert(0); }
+}
+
+/* ---------- Lab link ---------- */
+
+.v-eink-paper .ss-lab-link {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  color: var(--faded);
+  border-bottom: 1px solid transparent;
+}
+.v-eink-paper .ss-lab-link:hover {
+  color: var(--stamp);
+  border-bottom-color: var(--stamp);
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-eink-paper .ss-row.is-working .ss-state-dot { animation: none; }
+  .v-eink-paper .is-pending {
+    animation: none;
+    outline-color: var(--ink);
+  }
+  .v-eink-paper .ss-dropdown.ss-open,
+  .v-eink-paper .ss-menu,
+  .v-eink-paper .ss-badge-panel,
+  .v-eink-paper .ss-picker.ss-open {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .v-eink-paper .ss-toast {
+    animation: none;
+    filter: none;
+  }
+}
