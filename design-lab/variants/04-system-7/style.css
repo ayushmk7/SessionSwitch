@@ -1,0 +1,648 @@
+/* System 7 — strict 1-bit classic Mac OS.
+   Paper white, ink black, everything else is optical dithering. Windows,
+   menus, the quick-picker and toast alerts are all built to read as real
+   System 7 chrome: pinstriped title bars with a close box, disclosure-
+   triangle WindowShade badges, radio-button (◉/○) and checkbox (☒/☐)
+   glyphs on menu items, marching-ants pending chips, and centered modal
+   alert boxes for toasts. The only "color" anywhere is the inversion used
+   for selection highlighting — pure black-on-white or white-on-black. */
+
+body.ss.v-system-7 {
+  --paper: #fff;
+  --ink: #000;
+  --dither-tile: 4px;
+  --dither: repeating-conic-gradient(#000 0 25%, #fff 0 50%) 0 0 / var(--dither-tile) var(--dither-tile);
+  --font-ui: Charcoal, Geneva, 'Lucida Grande', sans-serif;
+  --font-mono: Monaco, Consolas, 'Courier New', monospace;
+
+  background: var(--paper);
+  color: var(--ink);
+  font: 12px/1.4 var(--font-ui);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  text-rendering: optimizeSpeed;
+}
+
+.v-system-7 button,
+.v-system-7 input {
+  font-family: inherit;
+}
+
+/* ---------- shared classic-window chrome ----------
+   A "window" in this skin is: 1px black border + a hard, non-blurred
+   2px black offset shadow (no blur radius — 1-bit rendering has no soft
+   edges). Applied directly to elements that are safe to border (never to
+   .ss-row, .ss-dropdown, .ss-window or .ss-chip-* per the clipping hazard
+   below — those get border/shadow without any overflow/clip-path). */
+
+.v-system-7 .ss-dropdown,
+.v-system-7 .ss-window,
+.v-system-7 .ss-menu,
+.v-system-7 .ss-badge-panel,
+.v-system-7 .ss-picker {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* NOTE: .ss-dropdown hosts open .ss-menu submenus that hang below a row
+   near the bottom of the panel, and .ss-window hosts a .ss-badge docked
+   half above its own top edge (translateY(-50%)). Neither may ever get
+   clip-path or overflow:hidden — but a plain box-shadow paints purely
+   behind/around the border box and never clips descendants, so the hard
+   offset shadow above is safe even though those two host escaping
+   children. `position` is deliberately left untouched on both: they are
+   already position:absolute per structure.css, which already gives the
+   dropdown's own close-box pseudo below a valid positioning context;
+   re-declaring `position: relative` here would silently break their real
+   placement (anchored under the menubar / docked on the desktop). */
+.v-system-7 .ss-dropdown::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+/* ---------- Desktop ---------- */
+
+.v-system-7 .ss-desktop {
+  background: var(--paper) var(--dither);
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-system-7 .ss-menubar {
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+  font-weight: bold;
+}
+
+.v-system-7 .ss-menubar-app {
+  cursor: pointer;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+}
+.v-system-7 .ss-menubar-app:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.v-system-7 .ss-menubar-app.ss-attention {
+  animation: sys7-blink 1s steps(1, end) infinite;
+}
+.v-system-7 .ss-menubar-app.ss-attention::after {
+  content: ' !';
+}
+
+@keyframes sys7-blink {
+  50% { background: var(--ink); color: var(--paper); }
+}
+
+.v-system-7 .ss-menubar-clock {
+  font-weight: normal;
+  padding-left: 12px;
+  border-left: 1px solid var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Dropdown (classic window w/ pinstriped titlebar) ---------- */
+
+.v-system-7 .ss-dropdown {
+  padding: 24px 8px 6px;
+}
+
+/* Fake titlebar: pinstripes + centered label, painted in ::before so no
+   extra DOM is needed and nothing about the dropdown's own box changes
+   (rows still lay out exactly as the shared scaffold expects). */
+.v-system-7 .ss-dropdown::before {
+  content: 'Sessions';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-weight: bold;
+  border-bottom: 1px solid var(--ink);
+  background:
+    repeating-linear-gradient(var(--ink) 0 1px, transparent 1px 3px),
+    var(--paper);
+}
+
+.v-system-7 .ss-row {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--ink);
+}
+.v-system-7 .ss-row:last-of-type {
+  border-bottom: none;
+}
+.v-system-7 .ss-row:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.v-system-7 .ss-row:hover .ss-chip-model,
+.v-system-7 .ss-row:hover .ss-chip-effort,
+.v-system-7 .ss-row:hover .ss-row-preset {
+  border-color: var(--paper);
+}
+
+/* Read-only: text rendered with the dither pattern instead of solid ink —
+   the period-accurate classic-Mac "grayed out / disabled" look — plus an
+   [RO] tag appended as a normal flex child. The row's own background stays
+   plain white on purpose: dithering the row background instead of the
+   text (an earlier attempt) made black text unreadable wherever it landed
+   on a black tile. Text-clipping the dither keeps every pixel legible. */
+.v-system-7 .ss-row.is-readonly .ss-row-project,
+.v-system-7 .ss-row.is-readonly .ss-row-terminal,
+.v-system-7 .ss-row.is-readonly .ss-chip-model,
+.v-system-7 .ss-row.is-readonly .ss-row-preset {
+  background-image: var(--dither);
+  background-size: 2px 2px;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.v-system-7 .ss-row.is-readonly:hover .ss-row-project,
+.v-system-7 .ss-row.is-readonly:hover .ss-row-terminal,
+.v-system-7 .ss-row.is-readonly:hover .ss-chip-model,
+.v-system-7 .ss-row.is-readonly:hover .ss-row-preset {
+  background-image: none;
+  color: var(--paper);
+}
+.v-system-7 .ss-row.is-readonly::after {
+  content: '[RO]';
+  flex: none;
+  margin-left: 4px;
+  padding: 0 3px;
+  font-size: 9px;
+  font-weight: bold;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.v-system-7 .ss-row.is-readonly:hover {
+  background: var(--ink);
+}
+.v-system-7 .ss-row.is-readonly:hover::after {
+  background: transparent;
+  color: var(--paper);
+  border-color: var(--paper);
+}
+
+/* ---------- State dots: three distinct 1-bit shapes/motions ---------- */
+
+.v-system-7 .ss-state-dot {
+  position: relative;
+  border-radius: 50%;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+/* working: rotating half-disc, like a busy wristwatch hand */
+.v-system-7 .ss-row.is-working .ss-state-dot::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ink) 0deg 180deg, transparent 180deg 360deg);
+  animation: sys7-dot-spin .9s steps(8, end) infinite;
+}
+@keyframes sys7-dot-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* awaiting: flashing filled square — a different shape from idle/working
+   circles, so it reads as attention even without color. */
+.v-system-7 .ss-row.is-awaiting .ss-state-dot {
+  border-radius: 1px;
+  background: var(--ink);
+  animation: sys7-dot-blink .8s steps(1, end) infinite;
+}
+@keyframes sys7-dot-blink {
+  50% { background: var(--paper); }
+}
+
+/* ---------- Row text + chips ---------- */
+
+.v-system-7 .ss-row-project {
+  font-weight: bold;
+}
+.v-system-7 .ss-row-terminal {
+  font-size: 10px;
+  opacity: 1;
+}
+.v-system-7 .ss-row-terminal::before {
+  content: '· ';
+}
+
+.v-system-7 .ss-chip-model,
+.v-system-7 .ss-chip-effort,
+.v-system-7 .ss-row-preset {
+  cursor: pointer;
+  padding: 1px 5px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 11px;
+}
+.v-system-7 .ss-chip-model:hover,
+.v-system-7 .ss-chip-effort:hover,
+.v-system-7 .ss-row-preset:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.v-system-7 .ss-row:hover .ss-chip-model:hover,
+.v-system-7 .ss-row:hover .ss-chip-effort:hover,
+.v-system-7 .ss-row:hover .ss-row-preset:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.v-system-7 .ss-effort-bars span {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--paper);
+  -webkit-text-stroke: 1px var(--ink);
+}
+.v-system-7 .ss-effort-bars span.on {
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+}
+.v-system-7 .ss-chip-effort:hover .ss-effort-bars span {
+  color: var(--ink);
+  -webkit-text-stroke: 1px var(--paper);
+}
+.v-system-7 .ss-chip-effort:hover .ss-effort-bars span.on {
+  color: var(--paper);
+  -webkit-text-stroke: 0;
+}
+
+/* marching-ants ring for pending chips (classic Mac marquee-selection) */
+.v-system-7 .ss-chip-model.is-pending::after,
+.v-system-7 .ss-chip-effort.is-pending::after,
+.v-system-7 .ss-row-preset.is-pending::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg, var(--ink) 50%, transparent 50%),
+    linear-gradient(90deg, var(--ink) 50%, transparent 50%),
+    linear-gradient(0deg, var(--ink) 50%, transparent 50%),
+    linear-gradient(0deg, var(--ink) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 6px 1px, 6px 1px, 1px 6px, 1px 6px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: sys7-ants .35s linear infinite;
+}
+@keyframes sys7-ants {
+  to { background-position: 6px 0, -6px 100%, 0 -6px, 100% 6px; }
+}
+
+/* ---------- Menus (model / effort / preset submenus + badge columns) ----------
+   Radio glyphs for model + effort (single-select), checkbox glyphs for
+   presets — distinguished purely by which chip anchors the open .ss-menu,
+   or which badge column (1st = model, 2nd = effort, 3rd = preset). */
+
+.v-system-7 .ss-menu {
+  padding: 3px 0;
+  margin-top: 4px;
+}
+.v-system-7 .ss-menu-item {
+  padding: 3px 10px 3px 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.v-system-7 .ss-menu-item:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.v-system-7 .ss-chip-model .ss-menu-item::before,
+.v-system-7 .ss-chip-effort .ss-menu-item::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(1) .ss-menu-item::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(2) .ss-menu-item::before {
+  content: '○ ';
+}
+.v-system-7 .ss-chip-model .ss-menu-item.is-active::before,
+.v-system-7 .ss-chip-effort .ss-menu-item.is-active::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(1) .ss-menu-item.is-active::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(2) .ss-menu-item.is-active::before {
+  content: '◉ ';
+}
+
+.v-system-7 .ss-row-preset .ss-menu-item::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(3) .ss-menu-item::before {
+  content: '☐ ';
+}
+.v-system-7 .ss-row-preset .ss-menu-item.is-active::before,
+.v-system-7 .ss-badge-panel .ss-badge-col:nth-child(3) .ss-menu-item.is-active::before {
+  content: '☒ ';
+}
+
+.v-system-7 .ss-badge-col {
+  padding: 2px 0;
+}
+.v-system-7 .ss-badge-col + .ss-badge-col {
+  border-left: 1px solid var(--ink);
+}
+.v-system-7 .ss-badge-col .ss-menu-item {
+  padding-right: 12px;
+}
+
+/* ---------- Dropdown footer: classic Mac pill push-buttons ---------- */
+
+.v-system-7 .ss-dropdown-footer {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ink);
+}
+.v-system-7 .ss-dropdown-footer button {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink) !important;
+}
+.v-system-7 .ss-dropdown-footer button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none !important;
+}
+
+/* ---------- Windows (front/back) ---------- */
+
+.v-system-7 .ss-window {
+  background: var(--paper);
+}
+/* front window gets a bigger offset shadow (reads as "lifted" above the
+   back window) — depth conveyed by offset size only, never by opacity,
+   to keep every pixel strictly black or white. */
+.v-system-7 .ss-window.is-front {
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.v-system-7 .ss-window-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.v-system-7 .ss-window-title::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.v-system-7 .ss-window.is-front .ss-window-title {
+  background:
+    repeating-linear-gradient(var(--ink) 0 1px, transparent 1px 3px),
+    var(--paper);
+}
+
+.v-system-7 .ss-window-body {
+  background: var(--paper);
+  padding: 8px 10px;
+}
+.v-system-7 .ss-window-body pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* ---------- Badge: WindowShade pill that "rolls up" ---------- */
+
+.v-system-7 .ss-badge-summary {
+  cursor: pointer;
+  padding: 2px 8px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(var(--ink) 0 1px, transparent 1px 3px),
+    var(--paper);
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 2px 2px 0 var(--ink);
+  white-space: nowrap;
+}
+.v-system-7 .ss-badge-summary::after {
+  content: '▸';
+  margin-left: 2px;
+}
+.v-system-7 .ss-badge.is-open .ss-badge-summary {
+  background: var(--ink);
+  color: var(--paper);
+}
+.v-system-7 .ss-badge.is-open .ss-badge-summary::after {
+  content: '▾';
+}
+
+.v-system-7 .ss-badge-panel {
+  margin-top: 3px;
+  padding: 2px;
+  transform-origin: top center;
+  animation: sys7-unroll .2s steps(5, end);
+}
+@keyframes sys7-unroll {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* ---------- Quick picker (⌘K) — classic Find/Command dialog ---------- */
+
+.v-system-7 .ss-picker {
+  padding: 24px 14px 14px;
+}
+.v-system-7 .ss-picker::before {
+  content: 'Command';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-weight: bold;
+  border-bottom: 1px solid var(--ink);
+  background:
+    repeating-linear-gradient(var(--ink) 0 1px, transparent 1px 3px),
+    var(--paper);
+}
+.v-system-7 .ss-picker::after {
+  content: '';
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 9px; height: 9px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.v-system-7 .ss-picker-input {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--ink);
+  padding: 6px 8px;
+  font-size: 14px;
+  outline: none;
+}
+.v-system-7 .ss-picker-input:focus {
+  border-width: 2px;
+  padding: 5px 7px;
+}
+
+.v-system-7 .ss-picker-session {
+  margin-top: 8px;
+  font-size: 11px;
+  font-style: italic;
+}
+.v-system-7 .ss-picker-session::before {
+  content: 'Target: ';
+  font-style: normal;
+  font-weight: bold;
+}
+
+.v-system-7 .ss-picker-modes {
+  margin-top: 10px;
+  gap: 0;
+}
+.v-system-7 .ss-picker-mode {
+  padding: 3px 12px;
+  border: 1px solid var(--ink);
+  margin-right: -1px;
+  font-size: 11px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.v-system-7 .ss-picker-mode.is-active {
+  background: var(--ink);
+  color: var(--paper);
+  position: relative;
+  z-index: 1;
+}
+
+.v-system-7 .ss-picker-list {
+  margin-top: 8px;
+  border: 1px solid var(--ink);
+}
+.v-system-7 .ss-picker-option {
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--ink);
+}
+.v-system-7 .ss-picker-option:last-child {
+  border-bottom: none;
+}
+.v-system-7 .ss-picker-option.is-active,
+.v-system-7 .ss-picker-option:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ---------- Toasts: centered classic Mac alert box ----------
+   Interpretation (agreed): scaffold owns toast DOM/lifecycle (auto-dismiss
+   after 3.5s, no click handler) — the "OK button" and icon here are purely
+   decorative ::before/::after, dismissal stays automatic. */
+
+.v-system-7 .ss-toast-wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+  max-width: none;
+}
+
+.v-system-7 .ss-toast {
+  position: relative;
+  width: max-content;
+  max-width: min(360px, 80vw);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink) !important;
+  padding: 16px 18px 40px 52px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.v-system-7 .ss-toast::before {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  font-size: 18px;
+}
+.v-system-7 .ss-toast::after {
+  content: 'OK';
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 2px 14px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.v-system-7 .ss-toast.is-verified::before { content: '✓'; }
+.v-system-7 .ss-toast.is-clamped::before { content: '⚠︎'; }
+.v-system-7 .ss-toast.is-rejected {
+  border-width: 2px;
+}
+.v-system-7 .ss-toast.is-rejected::before { content: '✕'; }
+
+/* ---------- Lab link ---------- */
+
+.v-system-7 .ss-lab-link {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: bold;
+  text-decoration: none;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.v-system-7 .ss-lab-link:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.v-system-7 .ss-lab-link:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-system-7,
+  .v-system-7 * {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
+  .v-system-7 .ss-menubar-app.ss-attention,
+  .v-system-7 .ss-row.is-working .ss-state-dot::before,
+  .v-system-7 .ss-row.is-awaiting .ss-state-dot,
+  .v-system-7 .ss-chip-model.is-pending::after,
+  .v-system-7 .ss-chip-effort.is-pending::after,
+  .v-system-7 .ss-row-preset.is-pending::after,
+  .v-system-7 .ss-badge-panel {
+    animation: none !important;
+  }
+}
