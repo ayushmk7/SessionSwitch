@@ -86,6 +86,15 @@ Debug/CLI flags (`main.swift`):
 
 ## Known limits (v1)
 
+- **FR-7 (don't clobber a user's typed-but-unsubmitted input) is not
+  implemented.** There is no input-buffer detection of any kind in v1: when
+  an injection lands, the `/model`/`/effort` command is appended straight
+  into the target tty and submitted, regardless of whether the user already
+  has a half-typed draft sitting in Claude Code's prompt. **Risk**: injecting
+  into a session with unsent text in its input buffer will append the slash
+  command to that text and submit the combined line. Queue-by-default (FR-8)
+  only defers injection while a session is `.working`; it does nothing to
+  protect an *idle* session with a half-typed draft.
 - **VS Code / JetBrains terminals are read-only.** They're discovered and
   shown in the menu (correct project/tty/terminal-app), but the app cannot
   script them — no AppleScript dictionary, and Accessibility-based keystroke
@@ -112,6 +121,13 @@ Debug/CLI flags (`main.swift`):
   environment), which surfaces as a blank project name in the menu — the
   terminal app / tty / read-only detection for that session still work
   correctly, only the project label is affected.
+- **Quick picker's ↑/↓ only navigate the current mode's option list, never
+  which session is acted on (FR-25).** `PickerModel.selectedSession` is
+  always the first non-read-only match for the current query (see the
+  no-frontmost-window-detection limit below); arrow keys move `optionIdx`
+  within that one session's Model/Effort/Preset options, not between
+  sessions. Narrowing to the intended session is done entirely by typing to
+  filter, not by arrowing between rows.
 - **No frontmost-window detection.** FR-26 ("act on the frontmost terminal
   window's session by default") isn't implemented — the quick picker's
   default selection is just the first non-read-only session in
@@ -179,9 +195,9 @@ requirement anywhere in this app (the global hotkey uses Carbon's
 | FR-4 | Discover pre-existing sessions | Done |
 | FR-5 | Mark uncontrollable sessions read-only + reason | Done |
 | FR-6 | Inject via AppleScript/Accessibility, verify | Done for Terminal/iTerm2 via AppleScript; no Accessibility/IDE path |
-| FR-7 | Don't clobber typed input; queue by default | Done via queue-by-default (not literal cut/restore) |
+| FR-7 | Don't clobber typed input; queue by default | Not implemented — see Known Limits |
 | FR-8 | Queue while busy + user can force immediate | Done (Task 9 adds the force toggle) |
-| FR-9 | Verify within 5s, show requested-vs-applied on mismatch | Done for model; effort has no verification source |
+| FR-9 | Verify within 5s, show requested-vs-applied on mismatch | Done for model; effort has no verification source. Reason strings surface only as a ✗ menu-bar flash, not a descriptive requested-vs-applied message — see FR-34 |
 | FR-10 | "New Session…" launcher | Not implemented |
 | FR-11 | Dynamic model catalog from installation | Not implemented — static 4-model catalog |
 | FR-12 | Valid effort levels per model, warn on mismatch | Partial — offers only valid levels; no explicit clamp-warning UI |
@@ -193,7 +209,7 @@ requirement anywhere in this app (the global hotkey uses Carbon's
 | FR-18 | Row click focuses terminal window | Not implemented |
 | FR-19–23 | Floating per-window overlay badge | Not implemented (M4, out of scope) |
 | FR-24 | Global hotkey opens picker | Done (⌥⌘M) |
-| FR-25 | Filterable picker, Tab/arrows/Enter/Esc | Done |
+| FR-25 | Filterable picker, Tab/arrows/Enter/Esc | Done — see Known Limits: ↑/↓ navigate only the top-match session's options |
 | FR-26 | Default to frontmost terminal window's session | Not implemented — defaults to first non-read-only match |
 | FR-27 | ≤3 keystrokes hotkey→applied | Partial — reachable, but not frontmost-aware |
 | FR-28 | Create/rename/reorder/delete presets | Partial — rename/delete/restore done; no create/reorder |

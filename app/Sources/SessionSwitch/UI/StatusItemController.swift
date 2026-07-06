@@ -181,7 +181,11 @@ final class StatusItemController: NSObject {
     private func rebuild() {
         guard let statusItem else { return }
         let sessions = store.sessions
-        let sessionsByPID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        // `uniquingKeysWith` (never `uniqueKeysWithValues:`) so a duplicate
+        // pid appearing twice in the same scan (e.g. a pid reused/reported
+        // mid-transition) can never trap the app -- keep the first entry
+        // seen for that pid.
+        let sessionsByPID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let entries = Self.buildMenuModel(sessions: sessions, presets: presets.presets)
 
         let menu = NSMenu()

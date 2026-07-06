@@ -193,6 +193,14 @@ final class QuickPicker: NSObject, NSWindowDelegate {
     private var panel: QuickPickerPanel?
     private var model: PickerModel?
 
+    /// Whichever app was frontmost right before `show()` activated
+    /// SessionSwitch to pull keyboard focus onto the panel -- almost always
+    /// the user's terminal. Captured so `hide()` can hand focus back to it;
+    /// without this, using the picker leaves the user's terminal window
+    /// visually in front but no longer key, silently eating their next
+    /// keystrokes.
+    private var previousApp: NSRunningApplication?
+
     /// Fired when the user commits a choice (Enter): `(session, action)` for
     /// the caller to route into `Injector`. The panel closes itself right
     /// after invoking this (see `show`'s `onCommit` wiring) -- callers must
@@ -224,12 +232,37 @@ final class QuickPicker: NSObject, NSWindowDelegate {
         self.panel = panel
         panel.contentView = NSHostingView(rootView: PickerView(model: model))
         center(panel)
+
+        // Capture whatever's frontmost BEFORE activating SessionSwitch (an
+        // `.accessory` app with no Dock icon/window otherwise) so `hide()`
+        // can hand focus back to it. Skip capturing SessionSwitch itself
+        // (e.g. a second toggle while already frontmost for some other
+        // reason) -- reactivating ourselves on hide would be a no-op at
+        // best and would discard the *real* previously-captured app at
+        // worst.
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            previousApp = frontmost
+        }
+
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
         panel?.orderOut(nil)
+
+        // Hand focus back to whatever was frontmost before the picker
+        // activated SessionSwitch -- otherwise the user's terminal is left
+        // visually in front but not key, silently swallowing their next
+        // keystrokes. `activate()` (no options) is the modern macOS 14+
+        // replacement for the now-deprecated `activate(options:)`; since
+        // this package's deployment target is macOS 14 (`Package.swift`),
+        // every build/run of this code has it available, so there's no
+        // deprecated fallback to reach for here (and no reason to keep one
+        // around just to trip the compiler's deprecation warning).
+        previousApp?.activate()
+        previousApp = nil
     }
 
     private func makePanel() -> QuickPickerPanel {

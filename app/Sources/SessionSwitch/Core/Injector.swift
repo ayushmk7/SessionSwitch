@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Where an AppleScript injection is delivered: a specific tty inside either
@@ -22,22 +23,30 @@ enum ScriptBuilder {
         let escaped = escapeForAppleScriptLiteral(command)
         switch target {
         case .terminalApp(let tty):
+            // `tty` also routed through the same escaping as `command`
+            // (defense in depth): it's always a well-formed `ttysNNN`-style
+            // token from `ps`/`lsof` in practice, so this is a no-op for
+            // every real value, but it means a malformed/adversarial tty
+            // string still can't break out of the AppleScript string
+            // literal it's embedded in.
+            let escapedTty = escapeForAppleScriptLiteral(tty)
             return """
             tell application "Terminal"
                 repeat with w in windows
                     repeat with t in tabs of w
-                        if tty of t is "/dev/\(tty)" then do script "\(escaped)" in t
+                        if tty of t is "/dev/\(escapedTty)" then do script "\(escaped)" in t
                     end repeat
                 end repeat
             end tell
             """
         case .iTerm2(let tty):
+            let escapedTty = escapeForAppleScriptLiteral(tty)
             return """
             tell application "iTerm2"
                 repeat with w in windows
                     repeat with tb in tabs of w
                         repeat with s in sessions of tb
-                            if tty of s is "/dev/\(tty)" then tell s to write text "\(escaped)"
+                            if tty of s is "/dev/\(escapedTty)" then tell s to write text "\(escaped)"
                         end repeat
                     end repeat
                 end repeat
@@ -192,7 +201,14 @@ final class Injector {
     /// request queues behind the model request even when the session is busy
     /// or the model request is still verifying.
     func applyPreset(_ preset: Preset, for session: SessionInfo) {
-        guard let model = ModelCatalog.model(idOrAlias: preset.modelID) else { return }
+        guard let model = ModelCatalog.model(idOrAlias: preset.modelID) else {
+            // Surface this rather than silently no-opping: a preset
+            // referencing a model the catalog no longer knows about (e.g.
+            // hand-edited defaults, or a future catalog change) should be
+            // visible as a failure, not look like nothing happened.
+            onResult?(session.id, .rejected("unknown model \(preset.modelID)"))
+            return
+        }
         requestModel(model, for: session)
 
         guard let effort = preset.effort else { return }
@@ -345,11 +361,18 @@ final class Injector {
             pollTimer?.invalidate()
             pollTimer = nil
         } else if pollTimer == nil {
-            pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+            // Added to `.common` run-loop modes (not just `.default`) so
+            // queue-draining/verification polling keeps ticking while an
+            // `NSMenu` is tracking (`.eventTracking` mode) -- otherwise a
+            // pending request would silently stall for as long as the
+            // status menu stays open.
+            let t = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     self?.store.refreshNow()
                 }
             }
+            RunLoop.main.add(t, forMode: .common)
+            pollTimer = t
         }
     }
 
@@ -391,7 +414,14 @@ final class Injector {
 
         if exitGroup.wait(timeout: .now() + 5.0) == .timedOut {
             process.terminate()
-            exitGroup.wait()
+            // SIGTERM isn't guaranteed to be honored by every child;
+            // escalate to SIGKILL if it's still alive after a further ~2s
+            // grace window, then move on regardless -- an unresponsive
+            // `osascript` (e.g. wedged behind a stuck Automation prompt)
+            // must never block the execute queue forever.
+            if exitGroup.wait(timeout: .now() + 2.0) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+            }
         }
         readGroup.wait()
 

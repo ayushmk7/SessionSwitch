@@ -487,6 +487,31 @@ final class InjectorTests: XCTestCase {
         XCTAssertEqual(recorder.scripts, [ScriptBuilder.script(for: .terminalApp(tty: "ttys992"), command: "/model sonnet")])
     }
 
+    // MARK: - applyPreset with an unresolvable model: rejected, not a silent no-op
+
+    func testApplyPresetWithUnknownModelIDIsRejectedWithoutExecutingOrQueuing() {
+        let oldMtime = Date().addingTimeInterval(-60)
+        let (store, _, _) = makeStoreWithOneSession(
+            pid: 700, tty: "ttys700", appComm: "Terminal", cwd: "/tmp/inj-preset-unknown-model",
+            model: "claude-haiku-4-5", mtime: oldMtime
+        )
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil })
+        var results: [(Int32, Injector.InjectionResult)] = []
+        injector.onResult = { pid, result in results.append((pid, result)) }
+
+        let session = store.sessions.first { $0.id == 700 }!
+        let preset = Preset(id: "p", name: "P", modelID: "not-a-real-model", effort: "high")
+
+        injector.applyPreset(preset, for: session)
+
+        XCTAssertTrue(recorder.scripts.isEmpty, "an unresolvable model must never reach execute")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results.first?.0, 700)
+        XCTAssertEqual(results.first?.1, .rejected("unknown model not-a-real-model"))
+        XCTAssertNil(store.sessions.first { $0.id == 700 }?.pending)
+    }
+
     // MARK: - applyPreset on idle session: model first, then effort, in order
 
     func testApplyPresetOnIdleSessionSendsModelFirstThenEffortInOrder() {

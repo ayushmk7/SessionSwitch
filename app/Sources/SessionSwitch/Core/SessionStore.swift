@@ -51,11 +51,17 @@ final class SessionStore: ObservableObject {
     func start() {
         timer?.invalidate()
         refreshNow()
-        timer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
+        // Added to `.common` run-loop modes (not just `.default`) so this
+        // keeps ticking while an `NSMenu` is tracking (`.eventTracking`
+        // mode) -- otherwise the refresh loop would silently stall for as
+        // long as the status menu stays open.
+        let t = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshNow()
             }
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     func stop() {
@@ -146,6 +152,11 @@ final class SessionStore: ObservableObject {
             )
         }
 
-        return infos.sorted { $0.projectName < $1.projectName }
+        // Tiebreak on `id` (pid) when `projectName`s collide (e.g. two
+        // sessions on the same project) so row order is stable across
+        // refreshes instead of depending on `ps`'s (unstable) scan order.
+        return infos.sorted {
+            $0.projectName == $1.projectName ? $0.id < $1.id : $0.projectName < $1.projectName
+        }
     }
 }

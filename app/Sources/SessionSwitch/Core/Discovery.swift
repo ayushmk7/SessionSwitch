@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Abstraction over "run a command, get its stdout back as a string" so
@@ -57,8 +58,13 @@ struct ShellRunner: CommandRunning {
 
         if exitGroup.wait(timeout: .now() + Self.timeout) == .timedOut {
             process.terminate()
-            // Once terminated the pipes close and both waiters finish quickly.
-            exitGroup.wait()
+            // SIGTERM isn't guaranteed to be honored by every child;
+            // escalate to SIGKILL if it's still alive after a further ~2s
+            // grace window, then move on regardless -- this may never
+            // block forever waiting on an unresponsive/hung `ps`/`lsof`.
+            if exitGroup.wait(timeout: .now() + 2.0) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+            }
         }
 
         readGroup.wait()

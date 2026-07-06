@@ -16,8 +16,10 @@ Menu-bar-only SwiftUI/AppKit app: discovers running `claude` CLI sessions
 (Terminal.app, iTerm2, VS Code, JetBrains), shows each one's project/model/
 state, and lets you switch model/effort per session via the menu bar
 dropdown, a global hotkey (⌥⌘M) Spotlight-style quick picker, and saved
-presets — all injected via AppleScript and verified against Claude Code's
-on-disk session state.
+presets — all injected via AppleScript. Model switches are verified against
+Claude Code's on-disk session state; effort is not — the CLI's on-disk state
+never records the current effort level, so an `/effort` injection is
+fire-and-forget (`.assumed`), not confirmed.
 
 ```sh
 cd app
