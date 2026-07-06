@@ -36,6 +36,11 @@ assert.equal(r.status, 'rejected');
 assert.match(r.reason, /read-only/);
 assert.equal(find('s6').model, 'claude-sonnet-5');
 
+// 5b. read-only wins over invalid-level rejection
+r = await engine.applyEffort('s6', 'max');
+assert.equal(r.status, 'rejected');
+assert.match(r.reason, /read-only/);
+
 // 6. preset applies model+effort atomically
 r = await engine.applyPreset('s2', 'deep-work');
 assert.equal(r.status, 'verified');

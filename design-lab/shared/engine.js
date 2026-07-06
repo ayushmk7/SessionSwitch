@@ -93,6 +93,9 @@ export function applyModel(id, modelId) {
 export function applyEffort(id, level) {
   const s = get(id);
   const m = model(s.model);
+  if (s.flags.includes('read-only')) {
+    return reject(s, `effort ${level}`, 'read-only session (SSH remote)');
+  }
   if (!m.efforts.includes(level)) {
     const fallback = m.efforts[m.efforts.length - 1];
     return reject(s, `effort ${level}`,
@@ -111,6 +114,9 @@ export function applyEffort(id, level) {
 export function cycleEffort(id) {
   const s = get(id);
   const m = model(s.model);
+  if (s.flags.includes('read-only')) {
+    return reject(s, 'effort', 'read-only session (SSH remote)');
+  }
   if (m.efforts.length === 0) {
     return reject(s, 'effort', 'no effort control for this model');
   }
