@@ -1,0 +1,755 @@
+/* Synthwave Arcade — sunset chrome, high-score tables, neon pulse.
+   Warm magenta->orange horizon (NOT the cold cyan HUD of variant 03),
+   chrome-clipped headline type, dashed coin-edge badges, VHS-tracking
+   toast, INSERT-COIN picker attract screen.
+
+   Hazard notes honored:
+   - No clip-path/overflow:hidden on .ss-row, .ss-dropdown, .ss-window,
+     .ss-chip-* (model/effort) or .ss-row-preset (each hosts a submenu
+     appended as a real child positioned top:100%; clipping the host
+     hides + un-clicks it).
+   - .ss-row stays position:static (structure.css); read-only dimming
+     uses color only, never opacity/filter (would create a stacking
+     context and let a later sibling row paint over an open submenu).
+   - .ss-row is reflowed with a CSS Grid override (allowed per contract,
+     precedent: variant 05) so RANK/PLAYER/MODEL/PWR read as table
+     columns inside the 340px dropdown without wrapping.
+   - Preset submenu is right-anchored (offset-only, not `position`)
+     since its chip sits at the row's right edge. */
+
+body.ss.v-synthwave-arcade {
+  --sky-top: #1a0533;
+  --sky-mid: #ff2975;
+  --sky-bottom: #ff8c42;
+  --pink: #ff2975;
+  --cyan: #00f0ff;
+  --amber: #ffcc00;
+  --panel: rgba(23, 4, 48, .88);
+  --panel-2: #22084a;
+  --panel-solid: #170430;
+  --line: rgba(255, 255, 255, .18);
+  --line-pink: rgba(255, 41, 117, .55);
+  --line-cyan: rgba(0, 240, 255, .5);
+  --text: #f6ecff;
+  --text-dim: rgba(246, 236, 255, .55);
+  --chrome: linear-gradient(180deg, #eee 0%, #999 55%, #fff 100%);
+  --font-display: 'Arial Narrow', 'Haettenschweiler', 'Franklin Gothic Bold', Impact, sans-serif;
+  --font-data: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  background: var(--sky-top);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-stretch: condensed;
+  font-size: 13px;
+  letter-spacing: .02em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.v-synthwave-arcade button {
+  font-family: inherit;
+}
+
+/* Reusable chrome-plate text: gradient fill clipped to glyphs. */
+.v-synthwave-arcade .ss-menubar-app,
+.v-synthwave-arcade .ss-row-project,
+.v-synthwave-arcade .ss-dropdown::before,
+.v-synthwave-arcade .ss-picker::before {
+  background: var(--chrome);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ---------- Sky + star field + horizon (desktop wallpaper) ---------- */
+
+.v-synthwave-arcade .ss-desktop {
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(1.6px 1.6px at 8% 14%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 21% 7%, rgba(255, 255, 255, .8), transparent 60%),
+    radial-gradient(1px 1px at 34% 21%, rgba(255, 255, 255, .7), transparent 60%),
+    radial-gradient(1.6px 1.6px at 54% 9%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 67% 17%, rgba(255, 255, 255, .6), transparent 60%),
+    radial-gradient(1px 1px at 79% 5%, rgba(255, 255, 255, .8), transparent 60%),
+    radial-gradient(1.6px 1.6px at 91% 19%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 12% 31%, rgba(255, 255, 255, .5), transparent 60%),
+    radial-gradient(1px 1px at 45% 29%, rgba(255, 255, 255, .55), transparent 60%),
+    radial-gradient(1px 1px at 73% 33%, rgba(255, 255, 255, .5), transparent 60%),
+    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 85%, var(--sky-bottom) 100%);
+}
+
+/* Retro sun disc, striped, glowing low on the horizon. */
+.v-synthwave-arcade .ss-desktop::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  width: 220px;
+  height: 220px;
+  margin-left: -110px;
+  border-radius: 50%;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 7px, var(--sky-top) 7px 12px),
+    linear-gradient(180deg, #ffe27a 0%, var(--pink) 65%, #7a1148 100%);
+  filter: drop-shadow(0 0 40px rgba(255, 140, 66, .5));
+  opacity: .9;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Perspective grid floor, pinned to the bottom of the desktop. */
+.v-synthwave-arcade .ss-desktop::before {
+  content: '';
+  position: absolute;
+  left: -30%;
+  right: -30%;
+  bottom: 0;
+  height: 44%;
+  background-image:
+    repeating-linear-gradient(90deg, var(--cyan) 0 2px, transparent 2px 48px),
+    repeating-linear-gradient(0deg, rgba(0, 240, 255, .45) 0 2px, transparent 2px 28px),
+    linear-gradient(180deg, rgba(26, 5, 51, 0) 0%, rgba(26, 5, 51, .75) 100%);
+  background-position: center bottom;
+  transform: perspective(220px) rotateX(62deg);
+  transform-origin: bottom center;
+  opacity: .6;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-synthwave-arcade .ss-menubar {
+  background: linear-gradient(180deg, #12012b 0%, #2b0546 100%);
+  border-bottom: 2px solid var(--pink);
+  box-shadow: 0 0 14px rgba(255, 41, 117, .5);
+}
+
+.v-synthwave-arcade .ss-menubar-app {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
+}
+.v-synthwave-arcade .ss-menubar-app:hover {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)) brightness(1.25);
+}
+.v-synthwave-arcade .ss-menubar-app.ss-attention {
+  background: linear-gradient(180deg, #fff3b0 0%, var(--amber) 55%, #a86a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: arcade-blink .5s steps(2, jump-none) infinite;
+}
+.v-synthwave-arcade .ss-menubar-app.ss-attention::after {
+  content: ' \00A4  INSERT COIN';
+  background: none;
+  color: var(--amber);
+  -webkit-text-fill-color: var(--amber);
+  font-size: 11px;
+}
+
+.v-synthwave-arcade .ss-menubar-clock {
+  font-family: var(--font-data);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/* ---------- Dropdown: high-score table ---------- */
+
+.v-synthwave-arcade .ss-dropdown {
+  background: linear-gradient(160deg, var(--panel-2) 0%, var(--panel-solid) 100%);
+  border: 2px solid var(--pink);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--line-cyan) inset, 0 16px 44px rgba(0, 0, 0, .6), 0 0 26px rgba(255, 41, 117, .35);
+  margin-top: 4px;
+  padding-bottom: 4px;
+}
+
+.v-synthwave-arcade .ss-dropdown::before {
+  content: '\2605  HIGH SCORES \2605\A RANK PLAYER MODEL PWR';
+  white-space: pre-line;
+  display: block;
+  text-align: center;
+  text-align-last: justify;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.7;
+  padding: 10px 14px 6px;
+  border-bottom: 1px dashed var(--line-cyan);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .6));
+}
+
+.v-synthwave-arcade .ss-dropdown {
+  counter-reset: ss-rank;
+}
+
+.v-synthwave-arcade .ss-row {
+  display: grid;
+  grid-template-columns: 22px minmax(54px, 1fr) 74px 40px 74px;
+  grid-template-areas:
+    "rank player model pwr preset"
+    "rank term   model pwr preset";
+  column-gap: 6px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  cursor: pointer;
+  counter-increment: ss-rank;
+}
+.v-synthwave-arcade .ss-row:hover {
+  background: rgba(255, 255, 255, .045);
+}
+.v-synthwave-arcade .ss-row:last-of-type {
+  border-bottom: none;
+}
+
+.v-synthwave-arcade .ss-state-dot {
+  grid-area: rank;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7a7a86, #2a2a33 70%);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, .6);
+  justify-self: center;
+  align-self: start;
+  margin-top: 2px;
+}
+.v-synthwave-arcade .ss-state-dot::before {
+  content: counter(ss-rank);
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-data);
+  font-size: 8px;
+  color: var(--text-dim);
+}
+.v-synthwave-arcade .ss-row.is-working .ss-state-dot {
+  background: radial-gradient(circle at 35% 30%, #b6fff0, var(--cyan) 70%);
+  box-shadow: 0 0 6px var(--cyan), 0 0 12px rgba(0, 240, 255, .6);
+  animation: arcade-blip 1s ease-in-out infinite;
+}
+.v-synthwave-arcade .ss-row.is-awaiting .ss-state-dot {
+  background: radial-gradient(circle at 35% 30%, #fff3b0, var(--amber) 70%);
+  box-shadow: 0 0 6px var(--amber), 0 0 14px rgba(255, 204, 0, .7);
+  animation: arcade-blink .6s steps(2, jump-none) infinite;
+}
+
+.v-synthwave-arcade .ss-row-project {
+  grid-area: player;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .7));
+}
+
+.v-synthwave-arcade .ss-row-terminal {
+  grid-area: term;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.v-synthwave-arcade .ss-chip-model {
+  grid-area: model;
+  font-family: var(--font-data);
+  font-size: 10px;
+  padding: 4px 5px;
+  border: 1px solid var(--line-pink);
+  border-radius: 3px;
+  background: rgba(255, 41, 117, .1);
+  color: var(--pink);
+  text-align: center;
+  white-space: nowrap;
+}
+.v-synthwave-arcade .ss-chip-model:hover {
+  background: var(--pink);
+  color: #170430;
+}
+
+.v-synthwave-arcade .ss-chip-effort {
+  grid-area: pwr;
+  justify-content: center;
+  padding: 4px 2px;
+  border-radius: 3px;
+}
+.v-synthwave-arcade .ss-chip-effort:hover {
+  background: rgba(0, 240, 255, .1);
+}
+.v-synthwave-arcade .ss-effort-bars span {
+  width: 5px;
+  margin: 0 1px;
+  color: rgba(0, 240, 255, .25);
+  font-size: 11px;
+  line-height: 1;
+}
+.v-synthwave-arcade .ss-effort-bars span.on {
+  color: var(--cyan);
+  text-shadow: 0 0 4px var(--cyan);
+}
+
+.v-synthwave-arcade .ss-row-preset {
+  grid-area: preset;
+  font-family: var(--font-data);
+  font-size: 9px;
+  padding: 4px 5px;
+  border: 1px dashed var(--line-cyan);
+  border-radius: 3px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+  text-align: center;
+}
+.v-synthwave-arcade .ss-row-preset:hover {
+  background: var(--cyan);
+  color: #0c1f24;
+}
+/* Right-anchor: chip sits at the row's right edge; the default left:0
+   submenu would run off the dropdown/viewport. Offset-only override. */
+.v-synthwave-arcade .ss-row-preset .ss-menu {
+  left: auto;
+  right: 0;
+}
+
+/* Read-only: color only (see hazard note up top). The "DEMO" tag gets
+   its OWN trailing grid column (added only for this row's template —
+   a project name like "ssh://legacy-billing" fills the whole `player`
+   cell, so sharing that cell with a tag would overlap the truncated
+   text instead of sitting clear of it). */
+.v-synthwave-arcade .ss-row.is-readonly {
+  cursor: default;
+  grid-template-columns: 22px minmax(40px, 1fr) 74px 40px 74px 40px;
+  grid-template-areas:
+    "rank player model pwr preset tag"
+    "rank term   model pwr preset tag";
+}
+.v-synthwave-arcade .ss-row.is-readonly .ss-row-project,
+.v-synthwave-arcade .ss-row.is-readonly .ss-row-terminal {
+  color: var(--text-dim);
+  background: none;
+  -webkit-text-fill-color: var(--text-dim);
+}
+.v-synthwave-arcade .ss-row.is-readonly .ss-chip-model,
+.v-synthwave-arcade .ss-row.is-readonly .ss-row-preset {
+  color: var(--text-dim);
+  border-color: var(--line);
+  background: none;
+}
+.v-synthwave-arcade .ss-row.is-readonly .ss-state-dot {
+  background: radial-gradient(circle at 35% 30%, #55505c, #221f28 70%);
+}
+.v-synthwave-arcade .ss-row.is-readonly::after {
+  content: 'DEMO';
+  grid-area: tag;
+  justify-self: center;
+  align-self: center;
+  font-family: var(--font-data);
+  font-size: 8px;
+  letter-spacing: .06em;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 3px 4px;
+}
+
+/* Neon pulse that travels around a chip's own border while an apply
+   is pending — four box-shadow "edges" swap which one is lit. */
+.v-synthwave-arcade .is-pending {
+  animation: arcade-chase .9s linear infinite;
+}
+@keyframes arcade-chase {
+  0%   { box-shadow: -3px 0 0 0 var(--pink), 0 -3px 0 0 transparent, 3px 0 0 0 transparent, 0 3px 0 0 transparent; }
+  25%  { box-shadow: -3px 0 0 0 transparent, 0 -3px 0 0 var(--cyan), 3px 0 0 0 transparent, 0 3px 0 0 transparent; }
+  50%  { box-shadow: -3px 0 0 0 transparent, 0 -3px 0 0 transparent, 3px 0 0 0 var(--pink), 0 3px 0 0 transparent; }
+  75%  { box-shadow: -3px 0 0 0 transparent, 0 -3px 0 0 transparent, 3px 0 0 0 transparent, 0 3px 0 0 var(--cyan); }
+  100% { box-shadow: -3px 0 0 0 var(--pink), 0 -3px 0 0 transparent, 3px 0 0 0 transparent, 0 3px 0 0 transparent; }
+}
+@keyframes arcade-blip {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+@keyframes arcade-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .2; }
+}
+
+/* ---------- Menus (model / effort / preset submenus, badge cols) ---------- */
+
+.v-synthwave-arcade .ss-menu {
+  background: linear-gradient(160deg, var(--panel-2), var(--panel-solid));
+  border: 1px solid var(--cyan);
+  border-radius: 5px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .6), 0 0 14px rgba(0, 240, 255, .35);
+  padding: 4px;
+  margin-top: 4px;
+}
+.v-synthwave-arcade .ss-menu-item {
+  font-family: var(--font-data);
+  font-size: 11px;
+  padding: 6px 10px;
+  color: var(--text);
+  white-space: nowrap;
+  border-radius: 3px;
+}
+.v-synthwave-arcade .ss-menu-item:hover {
+  background: var(--pink);
+  color: #170430;
+}
+.v-synthwave-arcade .ss-menu-item.is-active {
+  color: var(--cyan);
+  font-weight: 700;
+}
+.v-synthwave-arcade .ss-menu-item.is-active:hover {
+  color: #0c1f24;
+}
+
+.v-synthwave-arcade .ss-dropdown-footer {
+  border-top: 1px dashed var(--line-cyan);
+  margin-top: 4px;
+  padding: 8px 10px 2px;
+}
+.v-synthwave-arcade .ss-dropdown-footer button {
+  background: none;
+  border: 1px solid var(--pink);
+  border-radius: 3px;
+  color: var(--pink);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: 10px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.v-synthwave-arcade .ss-dropdown-footer button:hover {
+  background: var(--pink);
+  color: #170430;
+}
+
+/* ---------- Desktop + windows (arcade cabinets) ---------- */
+
+.v-synthwave-arcade .ss-window {
+  background: linear-gradient(180deg, rgba(23, 4, 48, .92), rgba(12, 2, 26, .95));
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .55);
+  opacity: .7;
+  transition: opacity .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.v-synthwave-arcade .ss-window.is-front {
+  opacity: 1;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--pink), 0 0 28px rgba(0, 240, 255, .45), 0 24px 60px rgba(0, 0, 0, .6);
+}
+
+.v-synthwave-arcade .ss-window-title {
+  padding: 8px 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: 12px;
+  color: #170430;
+  background: var(--chrome);
+  border-bottom: 2px solid var(--pink);
+  border-radius: 4px 4px 0 0;
+}
+
+.v-synthwave-arcade .ss-window-body {
+  padding: 12px 14px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgba(0, 0, 0, .18);
+}
+
+/* ---------- Badge: arcade coin token ---------- */
+
+.v-synthwave-arcade .ss-badge {
+  perspective: 420px;
+}
+.v-synthwave-arcade .ss-badge-summary {
+  gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 25%, #fff7d6, #ffd76b 45%, #a8790a 100%);
+  border: 2px dashed #6b4a05;
+  color: #3a2604;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5), 0 0 10px rgba(255, 204, 0, .4);
+}
+.v-synthwave-arcade .ss-badge-summary::before {
+  content: '\00A2';
+  font-size: 13px;
+  color: #7a5200;
+}
+.v-synthwave-arcade .ss-badge-summary:hover {
+  filter: brightness(1.08);
+}
+.v-synthwave-arcade .ss-badge-summary .ss-effort-bars span {
+  color: rgba(58, 38, 4, .35);
+}
+.v-synthwave-arcade .ss-badge-summary .ss-effort-bars span.on {
+  color: #3a2604;
+  text-shadow: none;
+}
+.v-synthwave-arcade .ss-badge.is-open .ss-badge-summary {
+  animation: coin-spin .5s ease-out;
+}
+@keyframes coin-spin {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+
+.v-synthwave-arcade .ss-badge-panel {
+  margin-top: 6px;
+  background: linear-gradient(160deg, var(--panel-2), var(--panel-solid));
+  border: 1px solid var(--cyan);
+  border-radius: 6px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .6), 0 0 14px rgba(0, 240, 255, .35);
+  padding: 4px;
+}
+.v-synthwave-arcade .ss-badge-col {
+  min-width: 88px;
+  padding: 2px 6px;
+}
+.v-synthwave-arcade .ss-badge-col + .ss-badge-col {
+  border-left: 1px dashed var(--line-cyan);
+}
+.v-synthwave-arcade .ss-badge-col .ss-menu-item {
+  font-size: 10px;
+}
+
+/* ---------- Quick picker (⌘K): INSERT COIN attract screen ---------- */
+
+.v-synthwave-arcade .ss-picker {
+  background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel-solid) 100%);
+  border: 2px solid var(--pink);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line-cyan) inset, 0 30px 80px rgba(0, 0, 0, .7), 0 0 40px rgba(255, 41, 117, .4);
+  padding: 20px 22px 16px;
+  gap: 10px;
+}
+.v-synthwave-arcade .ss-picker::before {
+  content: 'INSERT COIN';
+  display: block;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  filter: drop-shadow(0 2px 8px rgba(255, 41, 117, .6));
+  margin-bottom: 2px;
+}
+.v-synthwave-arcade .ss-picker::after {
+  content: 'PRESS ENTER \25B8';
+  display: block;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-top: 6px;
+  animation: arcade-blink 1s steps(2, jump-none) infinite;
+}
+
+.v-synthwave-arcade .ss-picker-input {
+  background: rgba(0, 0, 0, .4);
+  border: 2px solid var(--cyan);
+  border-radius: 6px;
+  color: var(--cyan);
+  caret-color: var(--pink);
+  font-family: var(--font-data);
+  font-size: 16px;
+  padding: 10px 14px;
+  outline: none;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.v-synthwave-arcade .ss-picker-input::placeholder {
+  color: rgba(0, 240, 255, .4);
+  text-transform: none;
+}
+.v-synthwave-arcade .ss-picker-input:focus {
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, .25);
+}
+
+.v-synthwave-arcade .ss-picker-session {
+  margin-top: 4px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.v-synthwave-arcade .ss-picker-session::before {
+  content: 'PLAYER 1: ';
+  color: var(--pink);
+}
+
+.v-synthwave-arcade .ss-picker-modes {
+  justify-content: center;
+  gap: 8px;
+}
+.v-synthwave-arcade .ss-picker-mode {
+  padding: 6px 14px;
+  border: 1px solid var(--line-pink);
+  border-radius: 4px;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.v-synthwave-arcade .ss-picker-mode.is-active {
+  background: var(--pink);
+  color: #170430;
+  border-color: var(--pink);
+}
+
+.v-synthwave-arcade .ss-picker-list {
+  margin-top: 4px;
+}
+.v-synthwave-arcade .ss-picker-option {
+  font-family: var(--font-data);
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--text);
+}
+.v-synthwave-arcade .ss-picker-option:hover {
+  background: rgba(0, 240, 255, .1);
+}
+.v-synthwave-arcade .ss-picker-option.is-active {
+  background: var(--cyan);
+  color: #0c1f24;
+  font-weight: 700;
+}
+
+/* ---------- Toasts ---------- */
+
+.v-synthwave-arcade .ss-toast-wrap {
+  gap: 10px;
+}
+
+.v-synthwave-arcade .ss-toast {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--panel-2), var(--panel-solid));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .55);
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--text);
+}
+.v-synthwave-arcade .ss-toast::before {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.v-synthwave-arcade .ss-toast.is-verified {
+  border-color: var(--cyan);
+}
+.v-synthwave-arcade .ss-toast.is-verified::before {
+  content: 'HIGH SCORE!';
+  color: var(--cyan);
+}
+.v-synthwave-arcade .ss-toast.is-rejected {
+  border-color: var(--pink);
+}
+.v-synthwave-arcade .ss-toast.is-rejected::before {
+  content: 'GAME OVER';
+  color: var(--pink);
+}
+.v-synthwave-arcade .ss-toast.is-clamped {
+  border-color: var(--amber);
+}
+.v-synthwave-arcade .ss-toast.is-clamped::before {
+  content: 'SIGNAL LIMITED \2014  ORG POLICY';
+  color: var(--amber);
+}
+/* VHS tracking bar: skewed noise stripe sweeping the (clamped) toast,
+   contained by overflow:hidden — safe here, .ss-toast hosts no popped
+   submenu/child that needs to escape its own box. */
+.v-synthwave-arcade .ss-toast.is-clamped::after {
+  content: '';
+  position: absolute;
+  inset: -20% 0;
+  background-image: repeating-linear-gradient(115deg, rgba(255, 255, 255, .18) 0 2px, transparent 2px 6px);
+  mix-blend-mode: overlay;
+  animation: vhs-tracking 2.2s linear infinite;
+  pointer-events: none;
+}
+@keyframes vhs-tracking {
+  0%   { transform: translateY(-15%); }
+  100% { transform: translateY(15%); }
+}
+
+/* ---------- Lab link ---------- */
+
+.v-synthwave-arcade .ss-lab-link {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 11px;
+  color: var(--cyan);
+  text-decoration: none;
+  background: var(--panel-solid);
+  border: 2px solid var(--pink);
+  border-radius: 20px;
+  padding: 6px 14px;
+  box-shadow: 0 0 10px rgba(255, 41, 117, .4);
+}
+.v-synthwave-arcade .ss-lab-link:hover {
+  background: var(--pink);
+  color: #170430;
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-synthwave-arcade,
+  .v-synthwave-arcade * {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+  }
+  .v-synthwave-arcade .ss-menubar-app.ss-attention,
+  .v-synthwave-arcade .ss-row.is-working .ss-state-dot,
+  .v-synthwave-arcade .ss-row.is-awaiting .ss-state-dot,
+  .v-synthwave-arcade .is-pending,
+  .v-synthwave-arcade .ss-picker::after,
+  .v-synthwave-arcade .ss-toast.is-clamped::after,
+  .v-synthwave-arcade .ss-badge.is-open .ss-badge-summary {
+    animation: none !important;
+    opacity: 1;
+    transform: none !important;
+  }
+}
