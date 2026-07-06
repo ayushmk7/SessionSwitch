@@ -1,0 +1,448 @@
+/* Swiss Minimal — editorial typography, zero boxes, zero animation.
+   Hierarchy is carried entirely by type, weight, tracking and 1px hairlines.
+   Palette: paper, ink, one red. No gradients, no shadows, no radius. */
+
+body.ss.v-swiss-minimal {
+  --paper: #fafafa;
+  --ink: #111111;
+  --ink-dim: #6e6e6e;
+  --red: #e30613;
+  --hairline: #d4d4d4;
+
+  --fs-micro: 11px;   /* uppercase tracked labels */
+  --fs-13: 13px;       /* chips / menu items / toasts */
+  --fs-16: 16px;       /* base / window body */
+  --fs-24: 24px;       /* project name */
+  --fs-40: 40px;       /* picker input */
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: var(--fs-16);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+.v-swiss-minimal * {
+  transition: none !important;
+}
+
+.v-swiss-minimal a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.v-swiss-minimal button {
+  font-family: inherit;
+}
+
+/* Reusable micro-label treatment */
+.v-swiss-minimal .ss-menubar-app,
+.v-swiss-minimal .ss-menubar-clock,
+.v-swiss-minimal .ss-row-terminal,
+.v-swiss-minimal .ss-picker-mode,
+.v-swiss-minimal .ss-picker-session,
+.v-swiss-minimal .ss-badge-summary,
+.v-swiss-minimal .ss-lab-link,
+.v-swiss-minimal .ss-dropdown-footer button,
+.v-swiss-minimal .ss-row-preset,
+.v-swiss-minimal .ss-toast::before {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+}
+
+/* ---------- Menu bar ---------- */
+
+.v-swiss-minimal .ss-menubar {
+  background: var(--paper);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.v-swiss-minimal .ss-menubar-app {
+  cursor: pointer;
+  color: var(--ink);
+}
+.v-swiss-minimal .ss-menubar-app:hover {
+  color: var(--red);
+}
+.v-swiss-minimal .ss-menubar-app.ss-attention {
+  color: var(--red);
+}
+.v-swiss-minimal .ss-menubar-app.ss-attention::after {
+  content: ' \2014 AWAITING';
+}
+
+.v-swiss-minimal .ss-menubar-clock {
+  color: var(--ink-dim);
+}
+
+/* ---------- Desktop ---------- */
+
+.v-swiss-minimal .ss-desktop {
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(17, 17, 17, .035) 0 1px, transparent 1px 8px);
+}
+
+/* ---------- Dropdown ---------- */
+
+.v-swiss-minimal .ss-dropdown {
+  background: var(--paper);
+  border-bottom: 1px solid var(--hairline);
+  padding: 8px 16px 0;
+}
+
+/* Two-line editorial entry: dot+project on line 1 (room for the big
+   light headline), terminal+chips+tag on line 2 (metadata line). A flat
+   flex row can't fit an 8px dot + 24px headline + 3 chips on 340px, so
+   this reflows via CSS Grid — outer/participation rules from
+   structure.css (flex:none, flex:1 1 auto, etc.) are simply ignored by
+   grid items; the geometry-relevant ones (position, white-space,
+   text-overflow, min-width) still apply untouched. */
+.v-swiss-minimal .ss-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto auto auto;
+  grid-template-areas:
+    "dot   proj  proj   proj   proj   proj"
+    "dot   term  model  effort preset tag";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.v-swiss-minimal .ss-state-dot {
+  grid-area: dot;
+  align-self: start;
+  margin-top: 8px;
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--hairline);
+}
+.v-swiss-minimal .ss-row.is-working .ss-state-dot {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.v-swiss-minimal .ss-row.is-awaiting .ss-state-dot {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+.v-swiss-minimal .ss-row-project {
+  grid-area: proj;
+  font-size: var(--fs-24);
+  font-weight: 300;
+  color: var(--ink);
+}
+
+.v-swiss-minimal .ss-row-terminal {
+  grid-area: term;
+  color: var(--ink-dim);
+}
+
+.v-swiss-minimal .ss-chip-model { grid-area: model; }
+.v-swiss-minimal .ss-chip-effort { grid-area: effort; }
+.v-swiss-minimal .ss-row-preset { grid-area: preset; }
+
+/* The preset chip sits at the row's right edge; its submenu (left:0 by
+   default, per structure.css) would run off the viewport past the
+   right-anchored dropdown. Hang it from the chip's right edge instead —
+   an offset change only, not a `position` override. */
+.v-swiss-minimal .ss-row-preset .ss-menu {
+  left: auto;
+  right: 0;
+}
+
+.v-swiss-minimal .ss-chip-model,
+.v-swiss-minimal .ss-chip-effort,
+.v-swiss-minimal .ss-row-preset {
+  font-size: var(--fs-13);
+  color: var(--ink);
+  cursor: pointer;
+  justify-self: start;
+}
+.v-swiss-minimal .ss-chip-model:hover,
+.v-swiss-minimal .ss-chip-effort:hover,
+.v-swiss-minimal .ss-row-preset:hover {
+  color: var(--red);
+}
+
+/* Read-only: dim via color, never opacity, on every text child. */
+.v-swiss-minimal .ss-row.is-readonly {
+  cursor: default;
+}
+.v-swiss-minimal .ss-row.is-readonly .ss-row-project,
+.v-swiss-minimal .ss-row.is-readonly .ss-row-terminal,
+.v-swiss-minimal .ss-row.is-readonly .ss-chip-model,
+.v-swiss-minimal .ss-row.is-readonly .ss-row-preset {
+  color: var(--ink-dim);
+}
+.v-swiss-minimal .ss-row.is-readonly .ss-state-dot {
+  border-color: var(--ink-dim);
+}
+.v-swiss-minimal .ss-row.is-readonly::after {
+  content: 'READ-ONLY';
+  grid-area: tag;
+  justify-self: end;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--ink-dim);
+}
+
+/* Effort: four rules of increasing weight, red when lit. */
+.v-swiss-minimal .ss-effort-bars {
+  width: 20px;
+}
+.v-swiss-minimal .ss-effort-bars span {
+  display: inline-block;
+  width: 3px;
+  font-size: 0;
+  line-height: 0;
+  background: var(--hairline);
+}
+.v-swiss-minimal .ss-effort-bars span:nth-child(1) { height: 4px; }
+.v-swiss-minimal .ss-effort-bars span:nth-child(2) { height: 8px; }
+.v-swiss-minimal .ss-effort-bars span:nth-child(3) { height: 12px; }
+.v-swiss-minimal .ss-effort-bars span:nth-child(4) { height: 16px; }
+.v-swiss-minimal .ss-effort-bars span.on {
+  background: var(--red);
+}
+
+/* Pending: red underline only (fade permitted, reduced-motion safe). */
+.v-swiss-minimal .is-pending::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2px;
+  background: var(--red);
+  animation: ss-pending-fade 1.2s ease-in-out infinite;
+}
+@keyframes ss-pending-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+
+/* Menus: borderless floating type columns, red index per item. */
+.v-swiss-minimal .ss-menu {
+  background: var(--paper);
+  padding: 8px 12px;
+  counter-reset: menuitem;
+}
+.v-swiss-minimal .ss-menu-item {
+  position: relative;
+  padding: 6px 0 6px 26px;
+  font-size: var(--fs-13);
+  color: var(--ink);
+  cursor: pointer;
+  counter-increment: menuitem;
+  white-space: nowrap;
+}
+.v-swiss-minimal .ss-menu-item::before {
+  content: counter(menuitem, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  color: var(--red);
+  font-size: var(--fs-micro);
+}
+.v-swiss-minimal .ss-menu-item:hover,
+.v-swiss-minimal .ss-menu-item.is-active {
+  color: var(--red);
+}
+
+.v-swiss-minimal .ss-dropdown-footer {
+  padding: 12px 0 16px;
+  gap: 20px;
+}
+.v-swiss-minimal .ss-dropdown-footer button {
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+}
+.v-swiss-minimal .ss-dropdown-footer button:hover {
+  color: var(--red);
+}
+
+/* ---------- Windows ---------- */
+
+.v-swiss-minimal .ss-window {
+  background: var(--paper);
+}
+
+.v-swiss-minimal .ss-window-title {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--ink-dim);
+}
+.v-swiss-minimal .ss-window.is-front .ss-window-title {
+  color: var(--ink);
+}
+.v-swiss-minimal .ss-window.is-front .ss-window-title::before {
+  content: '\25CF ';
+  color: var(--red);
+}
+
+.v-swiss-minimal .ss-window-body {
+  padding: 14px;
+  color: var(--ink-dim);
+}
+.v-swiss-minimal .ss-window.is-front .ss-window-body {
+  color: var(--ink);
+}
+.v-swiss-minimal .ss-window-body pre {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ---------- Badge ---------- */
+
+.v-swiss-minimal .ss-badge-summary {
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.v-swiss-minimal .ss-badge-summary:hover {
+  color: var(--red);
+}
+.v-swiss-minimal .ss-badge.is-open .ss-badge-summary {
+  color: var(--red);
+  border-bottom-color: var(--red);
+}
+
+.v-swiss-minimal .ss-badge-panel {
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+  padding: 10px 0;
+  gap: 0;
+}
+.v-swiss-minimal .ss-badge-col {
+  counter-reset: menuitem;
+  padding: 0 14px;
+  min-width: 96px;
+}
+.v-swiss-minimal .ss-badge-col + .ss-badge-col {
+  border-left: 1px solid var(--hairline);
+}
+
+/* ---------- Quick picker (editorial index page) ---------- */
+
+.v-swiss-minimal .ss-picker {
+  background: var(--paper);
+  border-top: 2px solid var(--red);
+  padding: 28px 28px 20px;
+}
+
+.v-swiss-minimal .ss-picker-input {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: var(--fs-40);
+  font-weight: 300;
+  padding: 0 0 10px;
+  outline: none;
+}
+.v-swiss-minimal .ss-picker-input::placeholder {
+  color: var(--hairline);
+}
+.v-swiss-minimal .ss-picker-input:focus {
+  border-bottom-color: var(--red);
+}
+
+.v-swiss-minimal .ss-picker-session {
+  margin-top: 12px;
+  color: var(--ink-dim);
+}
+
+.v-swiss-minimal .ss-picker-modes {
+  margin-top: 16px;
+  gap: 24px;
+}
+.v-swiss-minimal .ss-picker-mode {
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.v-swiss-minimal .ss-picker-mode:hover,
+.v-swiss-minimal .ss-picker-mode.is-active {
+  color: var(--red);
+}
+
+.v-swiss-minimal .ss-picker-list {
+  margin-top: 14px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+  counter-reset: pickeritem;
+}
+.v-swiss-minimal .ss-picker-option {
+  position: relative;
+  padding: 8px 0 8px 32px;
+  font-size: var(--fs-16);
+  color: var(--ink);
+  cursor: pointer;
+  counter-increment: pickeritem;
+}
+.v-swiss-minimal .ss-picker-option::before {
+  content: counter(pickeritem, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  font-size: var(--fs-micro);
+  color: var(--red);
+}
+.v-swiss-minimal .ss-picker-option:hover,
+.v-swiss-minimal .ss-picker-option.is-active {
+  color: var(--red);
+}
+
+/* ---------- Toasts: single red rule + text ---------- */
+
+.v-swiss-minimal .ss-toast-wrap {
+  background: transparent;
+}
+
+.v-swiss-minimal .ss-toast {
+  border-top: 2px solid var(--red);
+  padding: 8px 0 0;
+  font-size: var(--fs-13);
+  color: var(--ink);
+  background: var(--paper);
+}
+.v-swiss-minimal .ss-toast::before {
+  display: block;
+  color: var(--red);
+  margin-bottom: 2px;
+}
+.v-swiss-minimal .ss-toast.is-verified::before { content: 'Verified'; }
+.v-swiss-minimal .ss-toast.is-clamped::before { content: 'Clamped'; }
+.v-swiss-minimal .ss-toast.is-rejected::before { content: 'Rejected'; }
+
+/* ---------- Lab link ---------- */
+
+.v-swiss-minimal .ss-lab-link {
+  color: var(--ink);
+}
+.v-swiss-minimal .ss-lab-link:hover {
+  color: var(--red);
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .v-swiss-minimal .is-pending::after {
+    animation: none;
+    opacity: 1;
+  }
+}
