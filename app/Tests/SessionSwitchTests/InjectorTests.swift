@@ -410,6 +410,83 @@ final class InjectorTests: XCTestCase {
         XCTAssertNil(store.sessions.first { $0.id == 555 }?.pending)
     }
 
+    // MARK: - queueWhenBusy preference (Task 9): default true, override false forces immediate injection
+
+    /// `Injector` reads `UserDefaults` key `inject.queueWhenBusy` at enqueue
+    /// time. Left unset (an isolated suite proves this isn't reading
+    /// `.standard` under the hood), it must default to `true` -- the
+    /// pre-Task-9 behavior: a working session's request queues and does NOT
+    /// inject immediately.
+    func testQueueWhenBusyDefaultsToTrueAndQueuesWhileWorking() {
+        let suiteName = "com.sessionswitch.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        // Deliberately do NOT set "inject.queueWhenBusy" -- proving the
+        // unset-key default is true, not merely "whatever happens to be
+        // in .standard right now".
+
+        let recentMtime = Date() // within the 10s working threshold
+        let (store, _, _) = makeStoreWithOneSession(
+            pid: 991, tty: "ttys991", appComm: "Terminal", cwd: "/tmp/inj-qwb-default",
+            model: "claude-haiku-4-5", mtime: recentMtime
+        )
+        let recorder = ExecuteRecorder()
+        let injector = Injector(
+            store: store,
+            execute: { recorder.record($0); return nil },
+            pollInterval: 0.02,
+            pollTimeout: 0.2,
+            defaults: defaults
+        )
+        injector.onResult = { _, _ in }
+
+        let session = store.sessions.first { $0.id == 991 }!
+        XCTAssertEqual(session.state, .working)
+
+        injector.requestModel(sonnet, for: session)
+
+        // Give the async execute queue a beat to prove it did NOT fire.
+        let settled = expectation(description: "settled without injecting")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settled.fulfill() }
+        wait(for: [settled], timeout: 1.0)
+
+        XCTAssertTrue(recorder.scripts.isEmpty, "default queueWhenBusy=true must still queue while working")
+        XCTAssertEqual(store.sessions.first { $0.id == 991 }?.pending, "/model sonnet")
+    }
+
+    /// With `inject.queueWhenBusy` explicitly set to `false` in the same
+    /// isolated suite, a request against a still-`.working` session must
+    /// inject immediately -- no waiting for the session to go idle.
+    func testQueueWhenBusyFalseInjectsImmediatelyEvenWhileWorking() {
+        let suiteName = "com.sessionswitch.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: "inject.queueWhenBusy")
+
+        let recentMtime = Date() // within the 10s working threshold
+        let (store, _, _) = makeStoreWithOneSession(
+            pid: 992, tty: "ttys992", appComm: "Terminal", cwd: "/tmp/inj-qwb-force",
+            model: "claude-haiku-4-5", mtime: recentMtime
+        )
+        let recorder = ExecuteRecorder()
+        let injector = Injector(
+            store: store,
+            execute: { recorder.record($0); return nil },
+            pollInterval: 0.02,
+            pollTimeout: 0.2,
+            defaults: defaults
+        )
+        injector.onResult = { _, _ in }
+
+        let session = store.sessions.first { $0.id == 992 }!
+        XCTAssertEqual(session.state, .working)
+
+        injector.requestModel(sonnet, for: session)
+
+        waitUntil("script executed immediately despite working state") { recorder.scripts.count == 1 }
+        XCTAssertEqual(recorder.scripts, [ScriptBuilder.script(for: .terminalApp(tty: "ttys992"), command: "/model sonnet")])
+    }
+
     // MARK: - applyPreset on idle session: model first, then effort, in order
 
     func testApplyPresetOnIdleSessionSendsModelFirstThenEffortInOrder() {

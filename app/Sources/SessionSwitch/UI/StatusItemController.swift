@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// A pure, `Equatable` description of the sessions menu's contents, produced
 /// by `StatusItemController.buildMenuModel` independently of AppKit so it's
@@ -20,7 +21,8 @@ enum MenuEntry: Equatable {
     case presetSubmenu(pid: Int32, disabled: Bool, items: [PresetEntry])
     case separator
     case refreshNow
-    /// Task 9 stub: a disabled no-op placeholder in v1.
+    /// Opens `PreferencesWindow` (Task 9): Injection behavior, Permissions
+    /// status, Launch at Login, Presets management.
     case preferences
     case quit
 }
@@ -62,6 +64,10 @@ final class StatusItemController: NSObject {
 
     private(set) var statusItem: NSStatusItem?
     private var flashResetWorkItem: DispatchWorkItem?
+
+    /// Retained across opens so a second "Preferences…" click re-shows the
+    /// same window rather than building a new one every time (Task 9).
+    private var preferencesWindow: NSWindow?
 
     /// End of the currently active ✓/✗ title-flash window, if any. While it
     /// lies in the future, `updateTitle` must not repaint the status button:
@@ -107,6 +113,28 @@ final class StatusItemController: NSObject {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem = item
         rebuild()
+    }
+
+    // MARK: - Preferences window (Task 9)
+
+    /// Builds (once) and shows `PreferencesWindow`, activating the app so
+    /// the window reliably comes forward from this `.accessory` (no Dock
+    /// icon) app. Forced dark: the app has no light-mode Mono Glass
+    /// treatment, so the window's own appearance is pinned rather than
+    /// following the system setting.
+    private func showPreferences() {
+        if preferencesWindow == nil {
+            let hosting = NSHostingController(rootView: PreferencesWindow(presetStore: presets))
+            let window = NSWindow(contentViewController: hosting)
+            window.title = "SessionSwitch Preferences"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.center()
+            preferencesWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        preferencesWindow?.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Pure menu model (headlessly testable; see MenuBuildTests)
@@ -180,9 +208,7 @@ final class StatusItemController: NSObject {
         case .refreshNow:
             return actionItem(title: "Refresh Now") { [weak self] in self?.store.refreshNow() }
         case .preferences:
-            let item = NSMenuItem(title: "Preferences…", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            return item
+            return actionItem(title: "Preferences…") { [weak self] in self?.showPreferences() }
         case .quit:
             // No explicit target: resolves via the responder chain, exactly
             // like the pre-Task-7 AppDelegate's Quit item did.

@@ -98,11 +98,19 @@ final class Injector {
     /// unverified), keyed by the session's pid.
     var onResult: ((Int32, InjectionResult) -> Void)?
 
+    /// `UserDefaults` key for the queue-vs-force preference (FR-8): `true`
+    /// (default) queues a request against a `.working` session until it
+    /// goes idle (pre-Task-9 behavior, unchanged); `false` lets the user
+    /// force immediate injection even while the session is busy. Exposed so
+    /// `PreferencesWindow`'s toggle binds to the exact same key.
+    static let queueWhenBusyDefaultsKey = "inject.queueWhenBusy"
+
     private let store: SessionStore
     private let execute: (String) -> String?
     private let pollInterval: TimeInterval
     private let pollTimeout: TimeInterval
     private let presetGap: TimeInterval
+    private let defaults: UserDefaults
 
     /// Serial background queue for `execute` calls (see lifecycle note 3).
     private let executeQueue = DispatchQueue(label: "SessionSwitch.Injector.execute", qos: .userInitiated)
@@ -143,13 +151,20 @@ final class Injector {
         execute: @escaping (String) -> String? = Injector.osascript,
         pollInterval: TimeInterval = 0.5,
         pollTimeout: TimeInterval = 5.0,
-        presetGap: TimeInterval = 0.5
+        presetGap: TimeInterval = 0.5,
+        defaults: UserDefaults = .standard
     ) {
         self.store = store
         self.execute = execute
         self.pollInterval = pollInterval
         self.pollTimeout = pollTimeout
         self.presetGap = presetGap
+        self.defaults = defaults
+        // Registers the DEFAULT-domain value (lowest priority; never
+        // overwrites anything the user or PreferencesWindow already set) so
+        // an unset key genuinely reads back as `true`, not `false`
+        // (UserDefaults.bool(forKey:) on a missing key is `false`).
+        defaults.register(defaults: [Self.queueWhenBusyDefaultsKey: true])
 
         // Injector owns `store.onChange`: it's the mechanism both for
         // draining queued requests once a session goes idle, and for
@@ -202,10 +217,18 @@ final class Injector {
         updatePollTimer()
     }
 
+    /// Reads `UserDefaults` key `queueWhenBusyDefaultsKey` at enqueue/pump
+    /// time (never cached) so a mid-session `PreferencesWindow` toggle takes
+    /// effect on the very next request.
+    private var queueWhenBusy: Bool {
+        defaults.bool(forKey: Self.queueWhenBusyDefaultsKey)
+    }
+
     /// Starts the next queued request for `pid` if nothing is in flight and
-    /// the store currently reports the session idle. Reads the session fresh
-    /// from the store (not a possibly stale caller snapshot) so state/tty
-    /// reflect the latest scan.
+    /// -- unless the user has disabled `queueWhenBusy` (FR-8's "force
+    /// immediate injection") -- the store currently reports the session
+    /// idle. Reads the session fresh from the store (not a possibly stale
+    /// caller snapshot) so state/tty reflect the latest scan.
     private func pump(pid: Int32) {
         guard active[pid] == nil else { return }
         guard let fifo = queues[pid], !fifo.isEmpty else { return }
@@ -214,7 +237,7 @@ final class Injector {
             queues.removeValue(forKey: pid)
             return
         }
-        guard session.state == .idle else { return }
+        guard !queueWhenBusy || session.state == .idle else { return }
 
         var remaining = fifo
         let kind = remaining.removeFirst()
