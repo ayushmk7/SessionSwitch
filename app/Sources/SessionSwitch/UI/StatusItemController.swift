@@ -63,6 +63,16 @@ final class StatusItemController: NSObject {
     private(set) var statusItem: NSStatusItem?
     private var flashResetWorkItem: DispatchWorkItem?
 
+    /// End of the currently active ✓/✗ title-flash window, if any. While it
+    /// lies in the future, `updateTitle` must not repaint the status button:
+    /// `Injector.resolve()` fires `onResult` (which starts the flash) and
+    /// then `setPending` on the very next line, which synchronously fires
+    /// `store.onChange` -> our chained `rebuild()` -> `updateTitle()` in the
+    /// SAME call frame -- without this guard the flash would be overwritten
+    /// before AppKit ever draws it. Cleared by the flash's 2 s reset work
+    /// item, which then repaints from current store state.
+    private var flashDeadline: Date?
+
     init(store: SessionStore, injector: Injector, presets: PresetStore) {
         self.store = store
         self.injector = injector
@@ -305,7 +315,17 @@ final class StatusItemController: NSObject {
 
     // MARK: - Status title: "◐ N" (+ amber "!" when any session pending)
 
+    /// Pure decision: may the status title be repainted at `now`, given the
+    /// active flash window ending at `flashDeadline` (nil = no flash)?
+    /// Extracted (nonisolated, no AppKit) so the guard is headlessly
+    /// testable -- see MenuBuildTests' title-paint-guard cases.
+    nonisolated static func shouldPaintTitle(now: Date, flashDeadline: Date?) -> Bool {
+        guard let flashDeadline else { return true }
+        return now >= flashDeadline
+    }
+
     private func updateTitle(sessions: [SessionInfo]) {
+        guard Self.shouldPaintTitle(now: Date(), flashDeadline: flashDeadline) else { return }
         guard let button = statusItem?.button else { return }
         let text = NSMutableAttributedString(
             string: "\u{25D0} \(sessions.count)",
@@ -333,7 +353,10 @@ final class StatusItemController: NSObject {
 
     private func flash(symbol: String, color: NSColor) {
         guard let button = statusItem?.button else { return }
+        // Overlapping results: a second flash cancels the prior reset work
+        // item and restarts the full 2 s window from now.
         flashResetWorkItem?.cancel()
+        flashDeadline = Date().addingTimeInterval(2.0)
 
         button.attributedTitle = NSAttributedString(
             string: symbol,
@@ -342,6 +365,10 @@ final class StatusItemController: NSObject {
 
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            // Clear the window BEFORE repainting, or updateTitle's own
+            // shouldPaintTitle guard would suppress this very repaint.
+            self.flashDeadline = nil
+            self.flashResetWorkItem = nil
             self.updateTitle(sessions: self.store.sessions)
         }
         flashResetWorkItem = workItem

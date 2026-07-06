@@ -215,4 +215,47 @@ final class MenuBuildTests: XCTestCase {
         XCTAssertEqual(entries.count, 5 * 2 + 3)
         XCTAssertEqual(Array(entries.suffix(3)), [.refreshNow, .preferences, .quit])
     }
+
+    // MARK: - Status title paint guard while a result flash is active
+    //
+    // Regression (T7 review, Critical): Injector.resolve() fires onResult
+    // (which flashes ✓/✗ onto the status button) and then calls setPending on
+    // the very next line, which synchronously fires store.onChange -> the
+    // controller's chained rebuild() -> updateTitle() -- overwriting the
+    // flash in the same call frame, before any redraw. Title repaints must
+    // therefore be suppressed while a flash window is open, and resume once
+    // it expires.
+
+    func testTitlePaintsWhenNoFlashIsActive() {
+        XCTAssertTrue(StatusItemController.shouldPaintTitle(now: Date(), flashDeadline: nil))
+    }
+
+    func testTitlePaintSuppressedDuringActiveFlashWindow() {
+        let now = Date()
+        XCTAssertFalse(
+            StatusItemController.shouldPaintTitle(now: now, flashDeadline: now.addingTimeInterval(2.0)),
+            "a rebuild landing inside the 2 s flash window must not repaint the title over the flash"
+        )
+        XCTAssertFalse(
+            StatusItemController.shouldPaintTitle(
+                now: now.addingTimeInterval(1.999),
+                flashDeadline: now.addingTimeInterval(2.0)
+            ),
+            "still inside the window just before expiry"
+        )
+    }
+
+    func testTitlePaintResumesOnceFlashDeadlinePasses() {
+        let now = Date()
+        XCTAssertTrue(
+            StatusItemController.shouldPaintTitle(now: now, flashDeadline: now),
+            "at the deadline the flash is over; painting resumes"
+        )
+        XCTAssertTrue(
+            StatusItemController.shouldPaintTitle(
+                now: now.addingTimeInterval(2.5),
+                flashDeadline: now.addingTimeInterval(2.0)
+            )
+        )
+    }
 }
