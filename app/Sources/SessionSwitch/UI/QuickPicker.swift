@@ -224,8 +224,8 @@ final class QuickPicker: NSObject, NSWindowDelegate {
         self.panel = panel
         panel.contentView = NSHostingView(rootView: PickerView(model: model))
         center(panel)
-        panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
     }
 
     func hide() {
