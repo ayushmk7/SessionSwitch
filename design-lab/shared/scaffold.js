@@ -473,6 +473,7 @@ function handlePickerKey(e) {
 }
 
 function handleNavKey(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault();
     const idx = VARIANTS.findIndex(v => v.dir.slice(3) === currentVariant);

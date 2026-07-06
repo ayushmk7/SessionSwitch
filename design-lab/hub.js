@@ -84,6 +84,7 @@ function goToVariant(index) {
 
 function wireKeyboard() {
   document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       goToVariant(VARIANTS.length - 1);
