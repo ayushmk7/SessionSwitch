@@ -72,18 +72,22 @@ final class SessionStore: ObservableObject {
 
         let runner = self.runner
         let projectsRoot = self.projectsRoot
-        let previousPending = pendingByPID
 
         DispatchQueue.global(qos: .utility).async {
-            let computed = Self.scanAndBuild(
-                runner: runner,
-                projectsRoot: projectsRoot,
-                previousPending: previousPending
-            )
+            let computed = Self.scanAndBuild(runner: runner, projectsRoot: projectsRoot)
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.sessions = computed
-                self.pendingByPID = Self.pendingByPID(from: computed)
+                // Apply pending labels at PUBLISH time, from the live
+                // MainActor-side map -- never from a snapshot captured when
+                // the scan started, or a setPending() landing mid-scan would
+                // be silently reverted by this publish.
+                let livePIDs = Set(computed.map(\.id))
+                self.pendingByPID = self.pendingByPID.filter { livePIDs.contains($0.key) }
+                var published = computed
+                for index in published.indices {
+                    published[index].pending = self.pendingByPID[published[index].id]
+                }
+                self.sessions = published
                 self.isRefreshing = false
                 self.onChange?()
             }
@@ -101,20 +105,15 @@ final class SessionStore: ObservableObject {
         onChange?()
     }
 
-    private static func pendingByPID(from sessions: [SessionInfo]) -> [Int32: String] {
-        Dictionary(uniqueKeysWithValues: sessions.compactMap { session in
-            session.pending.map { (session.id, $0) }
-        })
-    }
-
     // MARK: - Off-main-actor scan (no access to instance state)
 
     /// Runs entirely off the main actor: pure function of its arguments, safe
-    /// to execute on a background queue.
+    /// to execute on a background queue. Builds sessions with `pending: nil`;
+    /// pending labels are applied at publish time on the main actor (see
+    /// `refreshNow()`).
     nonisolated private static func scanAndBuild(
         runner: CommandRunning,
-        projectsRoot: URL,
-        previousPending: [Int32: String]
+        projectsRoot: URL
     ) -> [SessionInfo] {
         let raws = Discovery.scan(runner: runner)
 
@@ -143,7 +142,7 @@ final class SessionStore: ObservableObject {
                 state: snapshot.state,
                 readOnly: readOnly,
                 readOnlyReason: readOnlyReason,
-                pending: previousPending[raw.pid]
+                pending: nil
             )
         }
 

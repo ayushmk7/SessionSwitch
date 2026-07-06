@@ -2,6 +2,34 @@ import XCTest
 
 @testable import SessionSwitch
 
+/// Thread-safe recorder for the injected `execute` closure: `execute` runs on
+/// a background queue in production (osascript can block for seconds behind
+/// an Automation prompt), so the fake must tolerate off-main recording.
+private final class ExecuteRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scriptsStorage: [String] = []
+    private var mainThreadFlags: [Bool] = []
+
+    func record(_ script: String) {
+        lock.lock()
+        scriptsStorage.append(script)
+        mainThreadFlags.append(Thread.isMainThread)
+        lock.unlock()
+    }
+
+    var scripts: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return scriptsStorage
+    }
+
+    var ranOnMainThread: [Bool] {
+        lock.lock()
+        defer { lock.unlock() }
+        return mainThreadFlags
+    }
+}
+
 @MainActor
 final class InjectorTests: XCTestCase {
 
@@ -77,17 +105,43 @@ final class InjectorTests: XCTestCase {
         return (store, runner, root)
     }
 
+    /// Spins the main run loop until `condition` becomes true (polled every
+    /// 20 ms) or `timeout` elapses, then asserts it. Needed because `execute`
+    /// runs asynchronously off the main thread.
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 2.0,
+        condition: @escaping () -> Bool
+    ) {
+        let exp = expectation(description: description)
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            if condition() || Date() > deadline {
+                exp.fulfill()
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { poll() }
+        }
+        poll()
+        wait(for: [exp], timeout: timeout + 1.0)
+        XCTAssertTrue(condition(), description)
+    }
+
     private let sonnet = ModelCatalog.model(idOrAlias: "sonnet")!
 
     // MARK: - ScriptBuilder: Terminal.app / iTerm2 exact strings + escaping
 
     func testScriptBuilderBuildsExactTerminalAppScript() {
+        // NB: real Terminal.app's AppleScript `tty of t` returns the FULL
+        // device path (verified live: `osascript -e 'tell application
+        // "Terminal" to tty of front window'` -> /dev/ttys000), so the
+        // comparison must be against "/dev/<tty>" just like iTerm2's.
         let script = ScriptBuilder.script(for: .terminalApp(tty: "ttys003"), command: "/model sonnet")
         XCTAssertEqual(script, """
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
-                    if tty of t is "ttys003" then do script "/model sonnet" in t
+                    if tty of t is "/dev/ttys003" then do script "/model sonnet" in t
                 end repeat
             end repeat
         end tell
@@ -116,7 +170,7 @@ final class InjectorTests: XCTestCase {
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
-                    if tty of t is "ttys005" then do script "say \\"hello\\" \\\\ world" in t
+                    if tty of t is "/dev/ttys005" then do script "say \\"hello\\" \\\\ world" in t
                 end repeat
             end repeat
         end tell
@@ -142,8 +196,8 @@ final class InjectorTests: XCTestCase {
         let (store, _, _) = makeStoreWithOneSession(
             pid: 111, tty: nil, appComm: "Terminal", cwd: "/tmp/inj-readonly", model: nil, mtime: Date()
         )
-        var executed: [String] = []
-        let injector = Injector(store: store, execute: { executed.append($0); return nil })
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil })
         var results: [(Int32, Injector.InjectionResult)] = []
         injector.onResult = { pid, result in results.append((pid, result)) }
 
@@ -152,11 +206,33 @@ final class InjectorTests: XCTestCase {
 
         injector.requestModel(sonnet, for: session)
 
-        XCTAssertTrue(executed.isEmpty)
+        XCTAssertTrue(recorder.scripts.isEmpty)
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.0, 111)
         XCTAssertEqual(results.first?.1, .rejected("no controlling terminal"))
         XCTAssertNil(store.sessions.first { $0.id == 111 }?.pending)
+    }
+
+    // MARK: - Off-main execute (osascript can block up to 5 s: Automation prompt)
+
+    func testExecuteRunsOffTheMainThread() {
+        let oldMtime = Date().addingTimeInterval(-60)
+        let (store, _, _) = makeStoreWithOneSession(
+            pid: 888, tty: "ttys888", appComm: "Terminal", cwd: "/tmp/inj-offmain",
+            model: "claude-haiku-4-5", mtime: oldMtime
+        )
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil }, pollInterval: 0.02, pollTimeout: 0.1)
+        injector.onResult = { _, _ in }
+
+        let session = store.sessions.first { $0.id == 888 }!
+        injector.requestModel(sonnet, for: session)
+
+        waitUntil("script executed") { recorder.scripts.count == 1 }
+        XCTAssertEqual(
+            recorder.ranOnMainThread, [false],
+            "execute must run off the main thread (a first-run Automation prompt can block osascript for seconds)"
+        )
     }
 
     // MARK: - Queue: working -> enqueue + pending, drains on idle
@@ -167,8 +243,9 @@ final class InjectorTests: XCTestCase {
             pid: 222, tty: "ttys222", appComm: "Terminal", cwd: "/tmp/inj-working",
             model: "claude-haiku-4-5", mtime: recentMtime
         )
-        var executed: [String] = []
-        let injector = Injector(store: store, execute: { executed.append($0); return nil }, pollInterval: 0.02, pollTimeout: 0.2)
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil }, pollInterval: 0.02, pollTimeout: 0.2)
+        injector.onResult = { _, _ in }
 
         let workingSession = store.sessions.first { $0.id == 222 }!
         XCTAssertEqual(workingSession.state, .working)
@@ -176,7 +253,7 @@ final class InjectorTests: XCTestCase {
         injector.requestModel(sonnet, for: workingSession)
 
         // Working: must not inject yet, but must be queued + reflected as pending.
-        XCTAssertTrue(executed.isEmpty)
+        XCTAssertTrue(recorder.scripts.isEmpty)
         XCTAssertEqual(store.sessions.first { $0.id == 222 }?.pending, "/model sonnet")
 
         // Flip the session to idle (old mtime) and trigger a refresh -- the
@@ -186,35 +263,71 @@ final class InjectorTests: XCTestCase {
         runner.psScanOutput = "222 ttys222  /usr/local/bin/claude"
 
         // NOTE: deliberately do NOT reassign `store.onChange` here -- Injector
-        // already owns that single slot (assigned in its init) to react to
-        // this exact refresh. Just trigger the refresh and poll `executed`.
+        // owns that single slot (assigned in its init) to react to this exact
+        // refresh. Just trigger the refresh and wait for the drain.
         store.refreshNow()
 
-        let executedExpectation = expectation(description: "queued request drained")
-        let deadline = Date().addingTimeInterval(2.0)
-        func poll() {
-            if !executed.isEmpty || Date() > deadline {
-                executedExpectation.fulfill()
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { poll() }
-        }
-        poll()
-        wait(for: [executedExpectation], timeout: 3.0)
+        waitUntil("queued request drained") { recorder.scripts.count == 1 }
+        XCTAssertEqual(recorder.scripts, [ScriptBuilder.script(for: .terminalApp(tty: "ttys222"), command: "/model sonnet")])
+    }
 
-        XCTAssertEqual(executed, [ScriptBuilder.script(for: .terminalApp(tty: "ttys222"), command: "/model sonnet")])
+    // MARK: - Per-pid FIFO: a second request must not drop the first
+
+    func testApplyPresetOnWorkingSessionQueuesBothAndDrainsInOrderWithTwoResults() {
+        let recentMtime = Date() // working
+        let (store, _, root) = makeStoreWithOneSession(
+            pid: 777, tty: "ttys777", appComm: "Terminal", cwd: "/tmp/inj-preset-queue",
+            model: "claude-haiku-4-5", mtime: recentMtime
+        )
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil }, pollInterval: 0.02, pollTimeout: 0.15, presetGap: 0.05)
+        var results: [(Int32, Injector.InjectionResult)] = []
+        injector.onResult = { pid, result in results.append((pid, result)) }
+
+        let session = store.sessions.first { $0.id == 777 }!
+        XCTAssertEqual(session.state, .working)
+        let preset = Preset(id: "p", name: "P", modelID: "claude-sonnet-5", effort: "high")
+
+        injector.applyPreset(preset, for: session)
+
+        // Wait past presetGap so BOTH requests have been enqueued against the
+        // still-working session -- the effort request must append behind the
+        // model request, not overwrite it.
+        let gapPassed = expectation(description: "preset gap passed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { gapPassed.fulfill() }
+        wait(for: [gapPassed], timeout: 1.0)
+        XCTAssertTrue(recorder.scripts.isEmpty, "nothing may inject while the session is working")
+
+        // Flip idle and refresh: both queued requests must drain strictly in
+        // order (effort only after the model request delivered its result).
+        let oldMtime = Date().addingTimeInterval(-60)
+        writeSessionFile(root: root, cwd: "/tmp/inj-preset-queue", model: "claude-haiku-4-5", mtime: oldMtime)
+        store.refreshNow()
+
+        waitUntil("both requests drained with two results", timeout: 3.0) {
+            recorder.scripts.count == 2 && results.count == 2
+        }
+
+        XCTAssertEqual(recorder.scripts, [
+            ScriptBuilder.script(for: .terminalApp(tty: "ttys777"), command: "/model sonnet"),
+            ScriptBuilder.script(for: .terminalApp(tty: "ttys777"), command: "/effort high"),
+        ])
+        XCTAssertEqual(results.map(\.0), [777, 777])
+        XCTAssertEqual(results.first?.1, .unverified("state file unchanged"), "model never changes in this fixture")
+        XCTAssertEqual(results.last?.1, .assumed("effort applied (unverifiable)"))
+        XCTAssertNil(store.sessions.first { $0.id == 777 }?.pending)
     }
 
     // MARK: - Verify: model change observed -> .verified
 
-    func testRequestModelOnIdleSessionInjectsImmediatelyThenVerifiesOnModelChange() {
+    func testRequestModelOnIdleSessionInjectsThenVerifiesOnModelChange() {
         let oldMtime = Date().addingTimeInterval(-60)
         let (store, _, root) = makeStoreWithOneSession(
             pid: 333, tty: "ttys333", appComm: "Terminal", cwd: "/tmp/inj-verify",
             model: "claude-haiku-4-5", mtime: oldMtime
         )
-        var executed: [String] = []
-        let injector = Injector(store: store, execute: { executed.append($0); return nil }, pollInterval: 0.02, pollTimeout: 1.0)
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil }, pollInterval: 0.02, pollTimeout: 1.0)
         var results: [(Int32, Injector.InjectionResult)] = []
         let verifiedExpectation = expectation(description: "verified")
         injector.onResult = { pid, result in
@@ -227,13 +340,16 @@ final class InjectorTests: XCTestCase {
 
         injector.requestModel(sonnet, for: session)
 
-        XCTAssertEqual(executed, [ScriptBuilder.script(for: .terminalApp(tty: "ttys333"), command: "/model sonnet")])
+        // Pending reflects the request synchronously; the script lands
+        // asynchronously (execute runs off-main).
         XCTAssertEqual(store.sessions.first { $0.id == 333 }?.pending, "/model sonnet")
+        waitUntil("script executed") { recorder.scripts.count == 1 }
+        XCTAssertEqual(recorder.scripts, [ScriptBuilder.script(for: .terminalApp(tty: "ttys333"), command: "/model sonnet")])
 
         // Simulate the CLI having actually switched models.
         writeSessionFile(root: root, cwd: "/tmp/inj-verify", model: "claude-sonnet-5", mtime: oldMtime)
 
-        wait(for: [verifiedExpectation], timeout: 2.0)
+        wait(for: [verifiedExpectation], timeout: 3.0)
 
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.1, .verified("model changed"))
@@ -259,7 +375,7 @@ final class InjectorTests: XCTestCase {
         let session = store.sessions.first { $0.id == 444 }!
         injector.requestModel(sonnet, for: session)
 
-        wait(for: [unverifiedExpectation], timeout: 2.0)
+        wait(for: [unverifiedExpectation], timeout: 3.0)
 
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.1, .unverified("state file unchanged"))
@@ -268,58 +384,56 @@ final class InjectorTests: XCTestCase {
 
     // MARK: - Effort -> .assumed (no state source)
 
-    func testRequestEffortResolvesAssumedImmediatelyAfterInjecting() {
+    func testRequestEffortResolvesAssumedAfterInjecting() {
         let oldMtime = Date().addingTimeInterval(-60)
         let (store, _, _) = makeStoreWithOneSession(
             pid: 555, tty: "ttys555", appComm: "iTerm2", cwd: "/tmp/inj-effort",
             model: "claude-sonnet-5", mtime: oldMtime
         )
-        var executed: [String] = []
-        let injector = Injector(store: store, execute: { executed.append($0); return nil })
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil })
         var results: [(Int32, Injector.InjectionResult)] = []
-        injector.onResult = { pid, result in results.append((pid, result)) }
+        let assumedExpectation = expectation(description: "assumed")
+        injector.onResult = { pid, result in
+            results.append((pid, result))
+            if case .assumed = result { assumedExpectation.fulfill() }
+        }
 
         let session = store.sessions.first { $0.id == 555 }!
         injector.requestEffort("high", for: session)
 
-        XCTAssertEqual(executed, [ScriptBuilder.script(for: .iTerm2(tty: "ttys555"), command: "/effort high")])
+        wait(for: [assumedExpectation], timeout: 3.0)
+
+        XCTAssertEqual(recorder.scripts, [ScriptBuilder.script(for: .iTerm2(tty: "ttys555"), command: "/effort high")])
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.1, .assumed("effort applied (unverifiable)"))
         XCTAssertNil(store.sessions.first { $0.id == 555 }?.pending)
     }
 
-    // MARK: - applyPreset: model first, then effort ~gap seconds later
+    // MARK: - applyPreset on idle session: model first, then effort, in order
 
-    func testApplyPresetSendsModelImmediatelyThenEffortAfterGap() {
+    func testApplyPresetOnIdleSessionSendsModelFirstThenEffortInOrder() {
         let oldMtime = Date().addingTimeInterval(-60)
         let (store, _, _) = makeStoreWithOneSession(
             pid: 666, tty: "ttys666", appComm: "Terminal", cwd: "/tmp/inj-preset",
             model: "claude-haiku-4-5", mtime: oldMtime
         )
-        var executed: [String] = []
-        let injector = Injector(store: store, execute: { executed.append($0); return nil }, pollInterval: 0.02, pollTimeout: 0.2, presetGap: 0.05)
+        let recorder = ExecuteRecorder()
+        let injector = Injector(store: store, execute: { recorder.record($0); return nil }, pollInterval: 0.02, pollTimeout: 0.2, presetGap: 0.05)
+        injector.onResult = { _, _ in }
 
         let session = store.sessions.first { $0.id == 666 }!
         let preset = Preset(id: "p", name: "P", modelID: "claude-sonnet-5", effort: "high")
 
         injector.applyPreset(preset, for: session)
 
-        // Immediately: only the model script has been sent.
-        XCTAssertEqual(executed, [ScriptBuilder.script(for: .terminalApp(tty: "ttys666"), command: "/model sonnet")])
+        // The model script must land first, alone (the effort request waits
+        // behind the model's verification in the per-pid FIFO).
+        waitUntil("model script executed first") { recorder.scripts.count >= 1 }
+        XCTAssertEqual(recorder.scripts.first, ScriptBuilder.script(for: .terminalApp(tty: "ttys666"), command: "/model sonnet"))
 
-        let bothSent = expectation(description: "effort script sent after gap")
-        let deadline = Date().addingTimeInterval(2.0)
-        func poll() {
-            if executed.count >= 2 || Date() > deadline {
-                bothSent.fulfill()
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { poll() }
-        }
-        poll()
-        wait(for: [bothSent], timeout: 3.0)
-
-        XCTAssertEqual(executed, [
+        waitUntil("effort script executed second", timeout: 3.0) { recorder.scripts.count == 2 }
+        XCTAssertEqual(recorder.scripts, [
             ScriptBuilder.script(for: .terminalApp(tty: "ttys666"), command: "/model sonnet"),
             ScriptBuilder.script(for: .terminalApp(tty: "ttys666"), command: "/effort high"),
         ])

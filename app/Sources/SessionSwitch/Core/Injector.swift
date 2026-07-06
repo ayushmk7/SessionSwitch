@@ -14,9 +14,10 @@ enum InjectionTarget: Equatable {
 enum ScriptBuilder {
 
     /// Builds the AppleScript that locates `target`'s tty and delivers
-    /// `command` into it. Terminal.app compares tty verbatim (its own AppleScript
-    /// `tty of t` property has no `/dev/` prefix); iTerm2 compares against
-    /// `/dev/<tty>` (its `tty of s` property does carry that prefix).
+    /// `command` into it. Both apps' AppleScript tty properties return the
+    /// FULL device path (verified live against Terminal.app:
+    /// `tty of front window` -> "/dev/ttys000"; iTerm2 likewise), so both
+    /// branches compare against "/dev/<tty>".
     static func script(for target: InjectionTarget, command: String) -> String {
         let escaped = escapeForAppleScriptLiteral(command)
         switch target {
@@ -25,7 +26,7 @@ enum ScriptBuilder {
             tell application "Terminal"
                 repeat with w in windows
                     repeat with t in tabs of w
-                        if tty of t is "\(tty)" then do script "\(escaped)" in t
+                        if tty of t is "/dev/\(tty)" then do script "\(escaped)" in t
                     end repeat
                 end repeat
             end tell
@@ -68,12 +69,21 @@ enum ScriptBuilder {
 /// via AppleScript, queuing requests against busy (`.working`) sessions and
 /// verifying model switches against `StateReaderV1`'s jsonl-derived state.
 ///
-/// Threading: like `SessionStore`, this is `@MainActor`. Unlike `SessionStore`,
-/// `execute` is a synchronous call (AppleScript delivery is expected to be
-/// near-instant -- it's posting keystrokes, not fetching data) so it runs
-/// directly on the main actor; the default `osascript` implementation still
-/// bounds itself with a timeout so a hung target app can't hang the caller
-/// forever (mirroring `ShellRunner`'s defensive pattern).
+/// Request lifecycle (all per-pid, strictly FIFO):
+/// 1. `enqueue`: readOnly -> `.rejected` immediately; otherwise appended to
+///    that pid's FIFO and reflected as `session.pending`.
+/// 2. `pump`: while nothing is in flight for the pid and the store reports it
+///    idle, the FIFO head is injected. A second request arriving while the
+///    first is queued/executing/verifying simply appends -- it never
+///    overwrites (`applyPreset` relies on this: its model request must not be
+///    dropped when its effort request lands `presetGap` later).
+/// 3. `execute` runs on a background queue -- the real `osascript` can block
+///    for seconds behind a first-run Automation consent prompt, which must
+///    never freeze the menu bar. All state mutation happens back on MainActor.
+/// 4. Resolution: model requests poll the store (up to `pollTimeout`) for the
+///    model change -> `.verified`/`.unverified`; effort requests resolve
+///    `.assumed` right after delivery (no state source to check). Only after
+///    a request delivers its `onResult` does the pid's next FIFO entry start.
 @MainActor
 final class Injector {
 
@@ -94,6 +104,9 @@ final class Injector {
     private let pollTimeout: TimeInterval
     private let presetGap: TimeInterval
 
+    /// Serial background queue for `execute` calls (see lifecycle note 3).
+    private let executeQueue = DispatchQueue(label: "SessionSwitch.Injector.execute", qos: .userInitiated)
+
     private enum RequestKind {
         case model(ClaudeModel)
         case effort(String)
@@ -106,21 +119,23 @@ final class Injector {
         }
     }
 
-    private struct PendingVerification {
-        let model: ClaudeModel
-        let deadline: Date
+    /// The single in-flight request for a pid: dispatched to the execute
+    /// queue, or awaiting model verification.
+    private enum ActivePhase {
+        case executing
+        case verifying(model: ClaudeModel, deadline: Date)
     }
 
-    /// Requests deferred because their session was `.working` at request
-    /// time, keyed by pid. Drained the moment `store` reports that pid idle.
-    private var queue: [Int32: RequestKind] = [:]
+    /// Waiting requests per pid, strictly FIFO. Only ever popped by `pump`,
+    /// and only when `active[pid] == nil` and the session is idle.
+    private var queues: [Int32: [RequestKind]] = [:]
 
-    /// In-flight model-change verifications, keyed by pid.
-    private var verifications: [Int32: PendingVerification] = [:]
+    /// In-flight request per pid (at most one; the FIFO holds the rest).
+    private var active: [Int32: ActivePhase] = [:]
 
-    /// Drives both queue-draining and verification polling: ticks
-    /// `store.refreshNow()` at `pollInterval` while `queue` or
-    /// `verifications` is non-empty, and is torn down once both drain.
+    /// Drives queue-draining and verification polling: ticks
+    /// `store.refreshNow()` at `pollInterval` while any queue or in-flight
+    /// request exists, and is torn down once everything resolves.
     private var pollTimer: Timer?
 
     init(
@@ -144,17 +159,23 @@ final class Injector {
         store.onChange = { [weak self] in self?.handleStoreChange() }
     }
 
+    deinit {
+        pollTimer?.invalidate()
+    }
+
     func requestModel(_ model: ClaudeModel, for session: SessionInfo) {
-        perform(.model(model), for: session)
+        enqueue(.model(model), for: session)
     }
 
     func requestEffort(_ level: String, for session: SessionInfo) {
-        perform(.effort(level), for: session)
+        enqueue(.effort(level), for: session)
     }
 
     /// Applies a preset's model immediately (subject to the normal
-    /// enqueue/inject rules), then its effort `presetGap` seconds later if
-    /// the preset has one.
+    /// queue/inject rules), then its effort `presetGap` seconds later if the
+    /// preset has one. Because requests append to a per-pid FIFO, the effort
+    /// request queues behind the model request even when the session is busy
+    /// or the model request is still verifying.
     func applyPreset(_ preset: Preset, for session: SessionInfo) {
         guard let model = ModelCatalog.model(idOrAlias: preset.modelID) else { return }
         requestModel(model, for: session)
@@ -167,44 +188,83 @@ final class Injector {
         }
     }
 
-    // MARK: - Core request handling
+    // MARK: - Enqueue + per-pid FIFO pump
 
-    private func perform(_ kind: RequestKind, for session: SessionInfo) {
+    private func enqueue(_ kind: RequestKind, for session: SessionInfo) {
         guard !session.readOnly else {
             onResult?(session.id, .rejected(session.readOnlyReason ?? "read-only"))
             return
         }
 
+        queues[session.id, default: []].append(kind)
         store.setPending(kind.command, forPID: session.id)
-
-        if session.state == .working {
-            queue[session.id] = kind
-        } else {
-            inject(kind, session: session)
-        }
+        pump(pid: session.id)
         updatePollTimer()
+    }
+
+    /// Starts the next queued request for `pid` if nothing is in flight and
+    /// the store currently reports the session idle. Reads the session fresh
+    /// from the store (not a possibly stale caller snapshot) so state/tty
+    /// reflect the latest scan.
+    private func pump(pid: Int32) {
+        guard active[pid] == nil else { return }
+        guard let fifo = queues[pid], !fifo.isEmpty else { return }
+        guard let session = store.sessions.first(where: { $0.id == pid }) else {
+            // Session vanished: nothing to inject into; drop its queue.
+            queues.removeValue(forKey: pid)
+            return
+        }
+        guard session.state == .idle else { return }
+
+        var remaining = fifo
+        let kind = remaining.removeFirst()
+        if remaining.isEmpty {
+            queues.removeValue(forKey: pid)
+        } else {
+            queues[pid] = remaining
+        }
+        inject(kind, session: session)
     }
 
     private func inject(_ kind: RequestKind, session: SessionInfo) {
         guard let target = Self.injectionTarget(for: session) else {
-            store.setPending(nil, forPID: session.id)
-            onResult?(session.id, .rejected(session.readOnlyReason ?? "not scriptable"))
+            // Shouldn't happen (readOnly gating catches these at enqueue),
+            // but resolve rather than wedge the pid's FIFO.
+            resolve(pid: session.id, result: .rejected(session.readOnlyReason ?? "not scriptable"))
             return
         }
 
+        active[session.id] = .executing
         let script = ScriptBuilder.script(for: target, command: kind.command)
-        _ = execute(script)
+        let execute = self.execute
+        let pid = session.id
+        executeQueue.async {
+            _ = execute(script)
+            Task { @MainActor [weak self] in
+                self?.didExecute(kind, pid: pid)
+            }
+        }
+    }
 
+    /// Back on MainActor after `execute` returned on the background queue.
+    private func didExecute(_ kind: RequestKind, pid: Int32) {
         switch kind {
         case .model(let model):
-            verifications[session.id] = PendingVerification(
-                model: model,
-                deadline: Date().addingTimeInterval(pollTimeout)
-            )
+            active[pid] = .verifying(model: model, deadline: Date().addingTimeInterval(pollTimeout))
         case .effort:
-            store.setPending(nil, forPID: session.id)
-            onResult?(session.id, .assumed("effort applied (unverifiable)"))
+            resolve(pid: pid, result: .assumed("effort applied (unverifiable)"))
         }
+        updatePollTimer()
+    }
+
+    /// Delivers a request's final result, then (and only then) lets the pid's
+    /// next queued request start.
+    private func resolve(pid: Int32, result: InjectionResult) {
+        active.removeValue(forKey: pid)
+        onResult?(pid, result)
+        store.setPending(queues[pid]?.first?.command, forPID: pid)
+        pump(pid: pid)
+        updatePollTimer()
     }
 
     private static func injectionTarget(for session: SessionInfo) -> InjectionTarget? {
@@ -216,43 +276,36 @@ final class Injector {
         }
     }
 
-    // MARK: - Reacting to store refreshes: drain queue, check verifications
+    // MARK: - Reacting to store refreshes: pump queues, check verifications
 
     private func handleStoreChange() {
-        drainQueue()
+        for pid in Array(queues.keys) {
+            pump(pid: pid)
+        }
         checkVerifications()
         updatePollTimer()
     }
 
-    private func drainQueue() {
-        for pid in Array(queue.keys) {
-            guard let session = store.sessions.first(where: { $0.id == pid }) else {
-                queue.removeValue(forKey: pid)
-                continue
-            }
-            guard session.state == .idle else { continue }
-            guard let kind = queue.removeValue(forKey: pid) else { continue }
-            inject(kind, session: session)
-        }
-    }
-
     private func checkVerifications() {
         let now = Date()
-        for pid in Array(verifications.keys) {
-            guard let pending = verifications[pid] else { continue }
+        // Iterate over a key snapshot but re-read `active` fresh per pid:
+        // resolve() can reenter handleStoreChange (via setPending's onChange)
+        // and mutate `active` while this loop runs.
+        for pid in Array(active.keys) {
+            guard case .verifying(let model, let deadline)? = active[pid] else { continue }
             guard let session = store.sessions.first(where: { $0.id == pid }) else {
-                verifications.removeValue(forKey: pid)
+                // Session vanished mid-verification: drop it (and anything
+                // queued behind it) silently -- there is no terminal left to
+                // deliver to or notify about.
+                active.removeValue(forKey: pid)
+                queues.removeValue(forKey: pid)
                 continue
             }
 
-            if Self.modelMatches(session.model, pending.model) {
-                verifications.removeValue(forKey: pid)
-                store.setPending(nil, forPID: pid)
-                onResult?(pid, .verified("model changed"))
-            } else if now >= pending.deadline {
-                verifications.removeValue(forKey: pid)
-                store.setPending(nil, forPID: pid)
-                onResult?(pid, .unverified("state file unchanged"))
+            if Self.modelMatches(session.model, model) {
+                resolve(pid: pid, result: .verified("model changed"))
+            } else if now >= deadline {
+                resolve(pid: pid, result: .unverified("state file unchanged"))
             }
         }
     }
@@ -265,7 +318,7 @@ final class Injector {
     }
 
     private func updatePollTimer() {
-        if queue.isEmpty && verifications.isEmpty {
+        if queues.isEmpty && active.isEmpty {
             pollTimer?.invalidate()
             pollTimer = nil
         } else if pollTimer == nil {
@@ -281,8 +334,8 @@ final class Injector {
 
     /// Default `execute` implementation: runs `osascript -e <script>` via
     /// `Process`. Bounded by a timeout (mirroring `ShellRunner`'s pattern) so
-    /// a hung/unresponsive target app can't hang the caller forever. Returns
-    /// stderr text on failure, `nil` on success.
+    /// a hung/unresponsive target app can't hang the (background) execute
+    /// queue forever. Returns stderr text on failure, `nil` on success.
     nonisolated static func osascript(_ script: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")

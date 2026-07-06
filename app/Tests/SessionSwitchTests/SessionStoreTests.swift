@@ -162,6 +162,43 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions.first?.pending, "/model sonnet", "pending label must survive a refresh for the same pid")
     }
 
+    func testSetPendingDuringInFlightRefreshSurvivesPublish() {
+        let runner = FakeRunner()
+        runner.psScanOutput = "777 ttys007  /usr/local/bin/claude"
+        runner.lsofOutputsByPID = [777: "n/tmp/race-project\n"]
+        configureAncestry(runner, pid: 777, appComm: "Terminal")
+        let slow = SlowFakeRunner(inner: runner, delay: 0.1)
+        let store = SessionStore(runner: slow, projectsRoot: makeProjectsRoot(), refreshInterval: 999)
+
+        let first = expectation(description: "first refresh")
+        store.onChange = { first.fulfill() }
+        store.refreshNow()
+        wait(for: [first], timeout: 5.0)
+        XCTAssertNil(store.sessions.first?.pending)
+
+        // Kick a second refresh, then set a pending label while its scan is
+        // still in flight on the background queue. Deterministic: the slow
+        // runner keeps the scan busy for ~0.4s, and the publish can't land
+        // until the main thread is free (i.e. only inside the wait below),
+        // so setPending always executes mid-scan. The publish must not
+        // revert the label to the pre-scan snapshot.
+        var changeCount = 0
+        let published = expectation(description: "second refresh publishes")
+        store.onChange = {
+            changeCount += 1
+            if changeCount == 2 { published.fulfill() } // 1 = setPending's republish, 2 = scan publish
+        }
+        store.refreshNow()
+        store.setPending("/model opus", forPID: 777)
+        XCTAssertEqual(store.sessions.first?.pending, "/model opus")
+        wait(for: [published], timeout: 5.0)
+
+        XCTAssertEqual(
+            store.sessions.first?.pending, "/model opus",
+            "a pending label set while a scan is in flight must survive the publish"
+        )
+    }
+
     // MARK: - Threading + reentrancy (CRITICAL directive)
 
     func testRefreshNowIsReentrancyGuardedAndPublishesOnMainThread() {
