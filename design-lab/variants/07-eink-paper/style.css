@@ -248,7 +248,7 @@ body.ss.v-eink-paper {
   border-color: var(--hair);
 }
 .v-eink-paper .ss-row.is-readonly .ss-row-project::after {
-  content: ' \261E read-only';
+  content: ' \261E  read-only';
   font-family: var(--font-body);
   font-style: italic;
   font-size: 11px;
@@ -303,7 +303,7 @@ body.ss.v-eink-paper {
   font-weight: bold;
 }
 .v-eink-paper .ss-menu-item.is-active::before {
-  content: '\261E ';
+  content: '\261E  ';
 }
 
 .v-eink-paper .ss-dropdown-footer {

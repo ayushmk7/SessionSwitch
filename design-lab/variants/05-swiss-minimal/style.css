@@ -70,7 +70,7 @@ body.ss.v-swiss-minimal {
   color: var(--red);
 }
 .v-swiss-minimal .ss-menubar-app.ss-attention::after {
-  content: ' \2014 AWAITING';
+  content: ' \2014  AWAITING';
 }
 
 .v-swiss-minimal .ss-menubar-clock {
@@ -288,7 +288,7 @@ body.ss.v-swiss-minimal {
   color: var(--ink);
 }
 .v-swiss-minimal .ss-window.is-front .ss-window-title::before {
-  content: '\25CF ';
+  content: '\25CF  ';
   color: var(--red);
 }
 
