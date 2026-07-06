@@ -157,7 +157,14 @@ body.ss.v-clay-pop {
   cursor: pointer;
 }
 .v-clay-pop .ss-row:hover { background: rgba(201, 182, 255, .16); }
-.v-clay-pop .ss-row:active { transform: scale(.97); }
+/* :not(:has(.ss-menu)): :active bubbles to every ancestor of the pressed
+   element, including this row, while a model/effort/preset submenu item
+   (a descendant, popped out of the chip) is being pressed. Squishing the
+   row then shifts the whole open submenu under the cursor between
+   mousedown and mouseup, so the click can land on the wrong element.
+   Skip the squish while a submenu is open in this row; a fresh press that
+   opens the menu still squishes normally (no .ss-menu exists yet then). */
+.v-clay-pop .ss-row:active:not(:has(.ss-menu)) { transform: scale(.97); }
 .v-clay-pop .ss-row:last-of-type { margin-bottom: 0; }
 
 /* ---------- State dot: googly eye ---------- */
@@ -260,9 +267,12 @@ body.ss.v-clay-pop {
 }
 .v-clay-pop .ss-chip-model:hover,
 .v-clay-pop .ss-row-preset:hover { color: #7a4fae; }
-.v-clay-pop .ss-chip-model:active,
-.v-clay-pop .ss-chip-effort:active,
-.v-clay-pop .ss-row-preset:active {
+/* :not(:has(.ss-menu)): same reason as .ss-row above — don't squish the
+   anchor chip (and shift its popped-open submenu) while pressing one of
+   the submenu's own items. */
+.v-clay-pop .ss-chip-model:active:not(:has(.ss-menu)),
+.v-clay-pop .ss-chip-effort:active:not(:has(.ss-menu)),
+.v-clay-pop .ss-row-preset:active:not(:has(.ss-menu)) {
   transform: scale(.94);
   box-shadow: var(--clay-shadow-pressed);
 }

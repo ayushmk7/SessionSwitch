@@ -49,13 +49,13 @@ body.ss.v-terminal-brutalist {
   box-shadow: 0 0 8px rgba(51, 255, 102, .35) !important;
 }
 
-/* ASCII box-corner accents on the four major panels */
-.v-terminal-brutalist .ss-dropdown,
-.v-terminal-brutalist .ss-window,
-.v-terminal-brutalist .ss-badge-panel,
-.v-terminal-brutalist .ss-picker {
-  position: relative;
-}
+/* ASCII box-corner accents on the four major panels.
+   No position rule needed here: .ss-dropdown/.ss-window/.ss-badge-panel are
+   already position:absolute and .ss-picker is position:fixed (structure.css),
+   so all four already establish a containing block for the ::before/::after
+   corner glyphs below. Redeclaring position:relative here used to override
+   those values (higher specificity than structure.css's bare class rule),
+   which broke dropdown/window/badge-panel/picker placement. */
 .v-terminal-brutalist .ss-dropdown::before,
 .v-terminal-brutalist .ss-window::before,
 .v-terminal-brutalist .ss-badge-panel::before,
